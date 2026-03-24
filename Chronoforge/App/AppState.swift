@@ -11,6 +11,8 @@ class AppState {
     let storeManager: StoreManager
     let leaderboardManager: LeaderboardManager
     let guildManager: GuildManager
+    let profileManager: ProfileManager
+    let announcementManager: AnnouncementManager
 
     init() {
         let saveManager = SaveManager()
@@ -27,6 +29,8 @@ class AppState {
         self.storeManager = StoreManager()
         self.leaderboardManager = LeaderboardManager()
         self.guildManager = GuildManager()
+        self.profileManager = ProfileManager()
+        self.announcementManager = AnnouncementManager()
 
         // Wire up consumable purchase delivery
         let engineRef = self.engine
@@ -50,6 +54,9 @@ class AppState {
             engine.save()
         }
 
+        // Sync guild bonuses into engine
+        syncGuildBonuses()
+
         engine.start()
         Task {
             await storeManager.loadProducts()
@@ -59,6 +66,7 @@ class AppState {
     }
 
     func handleAppBecameActive() {
+        syncGuildBonuses()
         let earnings = engine.calculateOfflineEarnings()
         if earnings > 0 {
             offlineEarnings = earnings
@@ -88,5 +96,12 @@ class AppState {
         let newEngine = GameEngine(player: newPlayer, saveManager: saveManager)
         // Note: In a full implementation, we'd rebuild the environment.
         // For MVP, the user restarts the app after reset.
+    }
+
+    /// Pushes current guild-level multipliers into the engine.
+    func syncGuildBonuses() {
+        engine.guildProductionMultiplier = guildManager.guildProductionMultiplier
+        engine.guildOfflineMultiplier = guildManager.guildOfflineMultiplier
+        engine.recalculateProduction()
     }
 }

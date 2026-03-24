@@ -9,6 +9,9 @@ struct LeaderboardEntry: Identifiable {
     let playerName: String
     let score: Int
     let isLocalPlayer: Bool
+    let vipTier: VIPTier
+    let nameColorId: String?
+    let title: String?
 }
 
 // MARK: - Leaderboard Manager
@@ -106,11 +109,17 @@ final class LeaderboardManager {
             let localID = GKLocalPlayer.local.gamePlayerID
 
             let mapped = entries.map { entry in
-                LeaderboardEntry(
+                let isLocal = entry.player.gamePlayerID == localID
+                // For non-local players, generate a weighted random VIP tier for display
+                let mockProfile = isLocal ? nil : PlayerProfile.generateMock()
+                return LeaderboardEntry(
                     rank: entry.rank,
                     playerName: entry.player.displayName,
                     score: entry.score,
-                    isLocalPlayer: entry.player.gamePlayerID == localID
+                    isLocalPlayer: isLocal,
+                    vipTier: isLocal ? .none : (mockProfile?.vipTier ?? .none),
+                    nameColorId: isLocal ? nil : mockProfile?.equippedNameColor,
+                    title: isLocal ? nil : mockProfile?.equippedTitle
                 )
             }
 

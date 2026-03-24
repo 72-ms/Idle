@@ -8,6 +8,7 @@ struct MainGameView: View {
     @State private var selectedTab: GameTab = .generators
     @Environment(GuildManager.self) private var guildManager
     @Environment(StoreManager.self) private var store
+    @Environment(AnnouncementManager.self) private var announcements
 
     @State private var showPrestige = false
     @State private var showSettings = false
@@ -42,6 +43,9 @@ struct MainGameView: View {
                     .onTapGesture { showDailyReward = false }
                 DailyRewardView()
             }
+
+            // Chronarch announcement banner overlay
+            AnnouncementBannerView()
         }
         .preferredColorScheme(.dark)
         .onAppear {
@@ -52,6 +56,7 @@ struct MainGameView: View {
             NotificationManager.shared.rescheduleNotifications()
             AudioManager.shared.playMusic(for: player.currentEra)
             gameScene.era = player.currentEra
+            announcements.start()
         }
     }
 

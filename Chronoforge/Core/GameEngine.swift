@@ -15,6 +15,12 @@ class GameEngine {
     private(set) var totalProductionRate: Decimal = 0
     private(set) var isRunning = false
 
+    /// External multiplier supplied by GuildManager (guild level production bonus).
+    var guildProductionMultiplier: Decimal = 1
+
+    /// External multiplier supplied by GuildManager (guild level offline bonus).
+    var guildOfflineMultiplier: Decimal = 1
+
     init(player: PlayerState, saveManager: SaveManager) {
         self.player = player
         self.saveManager = saveManager
@@ -57,7 +63,7 @@ class GameEngine {
         guard offlineSeconds > 60 else { return 0 }
 
         let offlineEfficiency = player.offlineEfficiency + offlineSkillBonus() + offlineRelicBonus()
-        let earnings = totalProductionRate * Decimal(offlineSeconds) * offlineEfficiency
+        let earnings = totalProductionRate * Decimal(offlineSeconds) * offlineEfficiency * guildOfflineMultiplier
 
         return earnings
     }
@@ -670,9 +676,10 @@ class GameEngine {
             }
         }
 
-        // Apply epoch prestige multiplier to production too
-        let shardAmpLevel = player.epochPerkState.level(for: EpochPerkID(rawValue: "shard_amplifier"))
-        // Note: shard_amplifier only affects prestige rewards, not production
+        // Apply guild production bonus
+        if guildProductionMultiplier > 1 {
+            total *= guildProductionMultiplier
+        }
 
         totalProductionRate = total
     }
@@ -838,7 +845,7 @@ class GameEngine {
         }
     }
 
-    private func save() {
+    func save() {
         player.lastSaveTimestamp = Date()
         saveManager.save(player)
     }

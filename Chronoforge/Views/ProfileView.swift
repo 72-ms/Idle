@@ -5,11 +5,25 @@ struct ProfileView: View {
     let isLocalPlayer: Bool
 
     @Environment(StoreManager.self) private var store
+    @State private var showEditProfile = false
 
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
                 profileHeader
+                if isLocalPlayer {
+                    Button {
+                        showEditProfile = true
+                    } label: {
+                        Label("Edit Profile", systemImage: "pencil")
+                            .font(.subheadline.weight(.medium))
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 10)
+                            .background(VIPColorResolver.color(for: profile.vipTier).opacity(0.15))
+                            .foregroundStyle(VIPColorResolver.color(for: profile.vipTier))
+                            .clipShape(Capsule())
+                    }
+                }
                 statsGrid
                 if !profile.pinnedAchievements.isEmpty {
                     achievementShowcase
@@ -22,6 +36,9 @@ struct ProfileView: View {
             .padding()
         }
         .background(profileBackground.ignoresSafeArea())
+        .sheet(isPresented: $showEditProfile) {
+            ProfileEditView()
+        }
     }
 
     // MARK: - Profile Header

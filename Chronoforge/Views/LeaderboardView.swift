@@ -4,8 +4,11 @@ import GameKit
 struct LeaderboardView: View {
     @Environment(LeaderboardManager.self) private var leaderboard
     @Environment(PlayerState.self) private var player
+    @Environment(StoreManager.self) private var store
     @State private var selectedBoard: String = LeaderboardManager.totalTEEarned
     @State private var isLoading = false
+
+    private var localVIPTier: VIPTier { store.vipProgress.currentTier }
 
     var body: some View {
         ScrollView {
@@ -60,12 +63,26 @@ struct LeaderboardView: View {
                                     Text("#\(entry.rank)")
                                         .font(.subheadline.monospacedDigit().bold())
                                         .foregroundStyle(entry.rank <= 3 ? .yellow : .white)
-                                        .frame(width: 50, alignment: .leading)
+                                        .frame(width: 40, alignment: .leading)
 
-                                    Text(entry.playerName)
-                                        .font(.subheadline)
-                                        .foregroundStyle(entry.isLocalPlayer ? .cyan : .white)
-                                        .lineLimit(1)
+                                    if entry.isLocalPlayer {
+                                        // Local player uses their actual VIP tier from store
+                                        LeaderboardNameRow(
+                                            name: entry.playerName,
+                                            vipTier: localVIPTier,
+                                            nameColorId: player.equippedNameColor,
+                                            title: player.equippedTitle,
+                                            isLocalPlayer: true
+                                        )
+                                    } else {
+                                        LeaderboardNameRow(
+                                            name: entry.playerName,
+                                            vipTier: entry.vipTier,
+                                            nameColorId: entry.nameColorId,
+                                            title: entry.title,
+                                            isLocalPlayer: false
+                                        )
+                                    }
 
                                     Spacer()
 
