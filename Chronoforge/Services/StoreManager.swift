@@ -145,6 +145,245 @@ struct PremiumBundle: Identifiable {
     }
 }
 
+// MARK: - VIP System
+
+enum VIPTier: Int, Codable, CaseIterable, Comparable {
+    case none = 0
+    case bronze = 1
+    case silver = 2
+    case gold = 3
+    case diamond = 4
+    case obsidian = 5
+
+    static func < (lhs: VIPTier, rhs: VIPTier) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+
+    var displayName: String {
+        switch self {
+        case .none: return "None"
+        case .bronze: return "Bronze"
+        case .silver: return "Silver"
+        case .gold: return "Gold"
+        case .diamond: return "Diamond"
+        case .obsidian: return "Obsidian"
+        }
+    }
+
+    var pointsRequired: Int {
+        switch self {
+        case .none: return 0
+        case .bronze: return 100
+        case .silver: return 500
+        case .gold: return 2000
+        case .diamond: return 8000
+        case .obsidian: return 25000
+        }
+    }
+
+    var nextTier: VIPTier? {
+        VIPTier(rawValue: rawValue + 1)
+    }
+
+    var symbolName: String {
+        switch self {
+        case .none: return "circle"
+        case .bronze: return "shield.fill"
+        case .silver: return "shield.lefthalf.filled"
+        case .gold: return "crown.fill"
+        case .diamond: return "diamond.fill"
+        case .obsidian: return "sparkle"
+        }
+    }
+
+    /// Passive perks that apply while at this tier or above.
+    var perks: [VIPPerk] {
+        switch self {
+        case .none:
+            return []
+        case .bronze:
+            return [
+                .productionBonus(0.1),
+                .dailyShards(25),
+                .exclusiveAvatar("vip_bronze_frame")
+            ]
+        case .silver:
+            return [
+                .productionBonus(0.25),
+                .dailyShards(75),
+                .offlineBonus(0.15),
+                .exclusiveAvatar("vip_silver_frame"),
+                .shopDiscount(0.05)
+            ]
+        case .gold:
+            return [
+                .productionBonus(0.5),
+                .dailyShards(150),
+                .offlineBonus(0.3),
+                .exclusiveAvatar("vip_gold_frame"),
+                .shopDiscount(0.10),
+                .bonusCurrencyOnPurchase(0.10)
+            ]
+        case .diamond:
+            return [
+                .productionBonus(1.0),
+                .dailyShards(300),
+                .offlineBonus(0.5),
+                .exclusiveAvatar("vip_diamond_frame"),
+                .shopDiscount(0.15),
+                .bonusCurrencyOnPurchase(0.20),
+                .exclusiveParticle("vip_diamond_aura")
+            ]
+        case .obsidian:
+            return [
+                .productionBonus(2.0),
+                .dailyShards(500),
+                .offlineBonus(1.0),
+                .exclusiveAvatar("vip_obsidian_frame"),
+                .shopDiscount(0.20),
+                .bonusCurrencyOnPurchase(0.35),
+                .exclusiveParticle("vip_obsidian_void"),
+                .exclusiveTheme("vip_obsidian_theme"),
+                .leaderboardBadge
+            ]
+        }
+    }
+}
+
+enum VIPPerk {
+    case productionBonus(Double)        // e.g. 0.1 = +10% production
+    case dailyShards(Int)               // free shards per day
+    case offlineBonus(Double)           // e.g. 0.15 = +15% offline earnings
+    case shopDiscount(Double)           // e.g. 0.05 = 5% bonus currency on pack purchases
+    case bonusCurrencyOnPurchase(Double) // e.g. 0.10 = +10% bonus on currency pack buys
+    case exclusiveAvatar(String)        // cosmetic ID
+    case exclusiveParticle(String)      // cosmetic ID
+    case exclusiveTheme(String)         // cosmetic ID
+    case leaderboardBadge               // special badge on leaderboard
+
+    var displayText: String {
+        switch self {
+        case .productionBonus(let pct): return "+\(Int(pct * 100))% production"
+        case .dailyShards(let n): return "\(n) Chrono Shards daily"
+        case .offlineBonus(let pct): return "+\(Int(pct * 100))% offline earnings"
+        case .shopDiscount(let pct): return "\(Int(pct * 100))% bonus on pack purchases"
+        case .bonusCurrencyOnPurchase(let pct): return "+\(Int(pct * 100))% extra currency on buys"
+        case .exclusiveAvatar: return "Exclusive avatar frame"
+        case .exclusiveParticle: return "Exclusive particle effect"
+        case .exclusiveTheme: return "Exclusive UI theme"
+        case .leaderboardBadge: return "Leaderboard VIP badge"
+        }
+    }
+}
+
+struct VIPProgress: Codable {
+    var totalPoints: Int = 0
+    var claimedTierPacks: Set<Int> = []  // VIPTier rawValues that have been claimed
+
+    var currentTier: VIPTier {
+        for tier in VIPTier.allCases.reversed() {
+            if totalPoints >= tier.pointsRequired {
+                return tier
+            }
+        }
+        return .none
+    }
+
+    var nextTier: VIPTier? { currentTier.nextTier }
+
+    var pointsToNextTier: Int? {
+        guard let next = nextTier else { return nil }
+        return max(0, next.pointsRequired - totalPoints)
+    }
+
+    var progressToNextTier: Double {
+        guard let next = nextTier else { return 1.0 }
+        let current = currentTier.pointsRequired
+        let range = next.pointsRequired - current
+        guard range > 0 else { return 1.0 }
+        return Double(totalPoints - current) / Double(range)
+    }
+
+    func hasClaimed(_ tier: VIPTier) -> Bool {
+        claimedTierPacks.contains(tier.rawValue)
+    }
+
+    mutating func claim(_ tier: VIPTier) {
+        claimedTierPacks.insert(tier.rawValue)
+    }
+}
+
+struct VIPTierPack: Identifiable {
+    let id: String
+    let tier: VIPTier
+    let name: String
+    let description: String
+    let productID: String
+    let shards: Int
+    let crystals: Int
+    let relicMaterials: Int
+    let boostMultiplier: Decimal
+    let boostMinutes: Int
+    let exclusiveCosmeticID: String?
+}
+
+// MARK: - VIP Point Values
+
+/// Maps product IDs to VIP points earned on purchase.
+/// Roughly 100 points per $1 USD spent.
+enum VIPPointMap {
+    static func points(for productID: String) -> Int {
+        switch productID {
+        // Shard packs
+        case StoreManager.ProductIDs.shardPackSmall: return 100
+        case StoreManager.ProductIDs.shardPackMedium: return 300
+        case StoreManager.ProductIDs.shardPackLarge: return 500
+        case StoreManager.ProductIDs.shardPackHuge: return 1000
+        case StoreManager.ProductIDs.shardPackMega: return 2500
+
+        // Crystal packs
+        case StoreManager.ProductIDs.crystalPackSmall: return 300
+        case StoreManager.ProductIDs.crystalPackMedium: return 700
+        case StoreManager.ProductIDs.crystalPackLarge: return 2000
+
+        // Time warps
+        case StoreManager.ProductIDs.timeWarp1h: return 100
+        case StoreManager.ProductIDs.timeWarp8h: return 300
+        case StoreManager.ProductIDs.timeWarp24h: return 500
+
+        // Boosters
+        case StoreManager.ProductIDs.boost2x30m: return 100
+        case StoreManager.ProductIDs.boost5x30m: return 200
+        case StoreManager.ProductIDs.boost10x1h: return 500
+
+        // Subscriptions (points each billing cycle)
+        case StoreManager.ProductIDs.chronoPassMonthly: return 500
+        case StoreManager.ProductIDs.vipMonthly: return 1000
+
+        // One-time purchases
+        case StoreManager.ProductIDs.removeAds: return 300
+        case StoreManager.ProductIDs.starterPack: return 500
+        case StoreManager.ProductIDs.progressionBundle: return 1000
+        case StoreManager.ProductIDs.legendaryBundle: return 3000
+        case StoreManager.ProductIDs.titanBundle: return 10000
+
+        // VIP tier packs
+        case StoreManager.ProductIDs.vipTierPackBronze: return 300
+        case StoreManager.ProductIDs.vipTierPackSilver: return 700
+        case StoreManager.ProductIDs.vipTierPackGold: return 1500
+        case StoreManager.ProductIDs.vipTierPackDiamond: return 5000
+        case StoreManager.ProductIDs.vipTierPackObsidian: return 15000
+
+        // Cosmetics (~$1-3 each)
+        default:
+            if productID.hasPrefix(StoreManager.ProductIDs.cosmeticPrefix) {
+                return 150
+            }
+            return 0
+        }
+    }
+}
+
 // MARK: - StoreManager
 
 @Observable
@@ -187,6 +426,13 @@ final class StoreManager {
         static let legendaryBundle = "com.chronoforge.bundle.legendary"
         static let titanBundle = "com.chronoforge.bundle.titan"
 
+        // VIP tier exclusive packs (one-time, unlocked at each tier)
+        static let vipTierPackBronze = "com.chronoforge.vip.pack.bronze"
+        static let vipTierPackSilver = "com.chronoforge.vip.pack.silver"
+        static let vipTierPackGold = "com.chronoforge.vip.pack.gold"
+        static let vipTierPackDiamond = "com.chronoforge.vip.pack.diamond"
+        static let vipTierPackObsidian = "com.chronoforge.vip.pack.obsidian"
+
         // Cosmetic shop prefixes
         static let cosmeticPrefix = "com.chronoforge.cosmetic."
 
@@ -203,7 +449,9 @@ final class StoreManager {
                 crystalPackSmall, crystalPackMedium, crystalPackLarge,
                 timeWarp1h, timeWarp8h, timeWarp24h,
                 boost2x30m, boost5x30m, boost10x1h,
-                progressionBundle, legendaryBundle, titanBundle
+                progressionBundle, legendaryBundle, titanBundle,
+                vipTierPackBronze, vipTierPackSilver, vipTierPackGold,
+                vipTierPackDiamond, vipTierPackObsidian
             ])
         }
     }
@@ -231,6 +479,13 @@ final class StoreManager {
     private(set) var timeWarpProducts: [Product] = []
     private(set) var boosterProducts: [Product] = []
     private(set) var bundleProducts: [Product] = []
+    private(set) var vipTierPackProducts: [Product] = []
+
+    // MARK: - VIP State
+
+    var vipProgress: VIPProgress = VIPProgress()
+    private(set) var vipTierPacks: [VIPTierPack] = []
+    private let vipProgressKey = "StoreManager.vipProgress"
 
     // MARK: - Chrono Pass State
 
@@ -273,6 +528,10 @@ final class StoreManager {
         case bundle(shards: Int, crystals: Int, relicMaterials: Int,
                     boostMultiplier: Decimal, boostMinutes: Int,
                     permanentTapBonus: Decimal, cosmeticID: String?)
+        case vipTierPack(shards: Int, crystals: Int, relicMaterials: Int,
+                         boostMultiplier: Decimal, boostMinutes: Int,
+                         cosmeticID: String?)
+        case vipCosmeticGrant(String)
     }
 
     // MARK: - Init
@@ -280,12 +539,14 @@ final class StoreManager {
     init() {
         loadCachedEntitlements()
         loadChronoPassProgress()
+        loadVIPProgress()
         buildChronoPassTiers()
         buildCosmeticCatalog()
         buildCurrencyPacks()
         buildTimeWarpPacks()
         buildBoosterPacks()
         buildPremiumBundles()
+        buildVIPTierPacks()
 
         transactionListener = listenForTransactions()
 
@@ -329,6 +590,9 @@ final class StoreManager {
 
             let bundleIDs = Set(premiumBundles.map(\.productID))
             bundleProducts = storeProducts.filter { bundleIDs.contains($0.id) }
+
+            let vipPackIDs = Set(vipTierPacks.map(\.productID))
+            vipTierPackProducts = storeProducts.filter { vipPackIDs.contains($0.id) }
         } catch {
             lastError = "Failed to load products: \(error.localizedDescription)"
         }
@@ -352,6 +616,7 @@ final class StoreManager {
                 let transaction = try checkVerification(verification)
                 await applyTransaction(transaction)
                 await transaction.finish()
+                awardVIPPoints(for: product.id)
                 return true
 
             case .userCancelled:
@@ -456,6 +721,23 @@ final class StoreManager {
         return await purchase(product)
     }
 
+    @MainActor
+    func purchaseVIPTierPack(_ pack: VIPTierPack) async -> Bool {
+        guard vipProgress.currentTier >= pack.tier else {
+            lastError = "You must reach \(pack.tier.displayName) VIP to unlock this pack."
+            return false
+        }
+        guard !vipProgress.hasClaimed(pack.tier) else {
+            lastError = "You have already purchased this tier pack."
+            return false
+        }
+        guard let product = vipTierPackProducts.first(where: { $0.id == pack.productID }) else {
+            lastError = "VIP tier pack not available."
+            return false
+        }
+        return await purchase(product)
+    }
+
     // MARK: - Product Lookup
 
     func product(forCurrencyPack pack: CurrencyPack) -> Product? {
@@ -472,6 +754,10 @@ final class StoreManager {
 
     func product(forBundle bundle: PremiumBundle) -> Product? {
         bundleProducts.first { $0.id == bundle.productID }
+    }
+
+    func product(forVIPTierPack pack: VIPTierPack) -> Product? {
+        vipTierPackProducts.first { $0.id == pack.productID }
     }
 
     // MARK: - Restore Purchases
@@ -729,6 +1015,17 @@ final class StoreManager {
                     multiplier: booster.multiplier,
                     minutes: booster.durationMinutes
                 ))
+            } else if let tierPack = vipTierPacks.first(where: { $0.productID == transaction.productID }) {
+                vipProgress.claim(tierPack.tier)
+                saveVIPProgress()
+                onConsumablePurchased?(.vipTierPack(
+                    shards: tierPack.shards,
+                    crystals: tierPack.crystals,
+                    relicMaterials: tierPack.relicMaterials,
+                    boostMultiplier: tierPack.boostMultiplier,
+                    boostMinutes: tierPack.boostMinutes,
+                    cosmeticID: tierPack.exclusiveCosmeticID
+                ))
             }
         }
 
@@ -792,6 +1089,55 @@ final class StoreManager {
             return
         }
         chronoPassProgress = progress
+    }
+
+    // MARK: - VIP Persistence & Points
+
+    private func saveVIPProgress() {
+        if let data = try? JSONEncoder().encode(vipProgress) {
+            UserDefaults.standard.set(data, forKey: vipProgressKey)
+        }
+    }
+
+    private func loadVIPProgress() {
+        guard let data = UserDefaults.standard.data(forKey: vipProgressKey),
+              let progress = try? JSONDecoder().decode(VIPProgress.self, from: data) else {
+            return
+        }
+        vipProgress = progress
+    }
+
+    private func awardVIPPoints(for productID: String) {
+        let points = VIPPointMap.points(for: productID)
+        guard points > 0 else { return }
+        let previousTier = vipProgress.currentTier
+        vipProgress.totalPoints += points
+        saveVIPProgress()
+
+        // Grant cosmetics for newly reached tiers
+        let newTier = vipProgress.currentTier
+        if newTier > previousTier {
+            grantVIPTierCosmetics(from: previousTier, to: newTier)
+        }
+    }
+
+    private func grantVIPTierCosmetics(from oldTier: VIPTier, to newTier: VIPTier) {
+        for tier in VIPTier.allCases where tier > oldTier && tier <= newTier {
+            for perk in tier.perks {
+                switch perk {
+                case .exclusiveAvatar(let id), .exclusiveParticle(let id), .exclusiveTheme(let id):
+                    ownedCosmeticIDs.insert(id)
+                    onConsumablePurchased?(.vipCosmeticGrant(id))
+                default:
+                    break
+                }
+            }
+        }
+        cacheEntitlements()
+    }
+
+    func vipTierPack(for tier: VIPTier) -> VIPTierPack? {
+        vipTierPacks.first { $0.tier == tier }
     }
 
     // MARK: - Chrono Pass Tier Builder
@@ -1075,6 +1421,58 @@ final class StoreManager {
                 permanentTapBonus: 10,
                 badge: "Whale Tier",
                 accent: .gold
+            )
+        ]
+    }
+
+    // MARK: - VIP Tier Pack Builder
+
+    private func buildVIPTierPacks() {
+        vipTierPacks = [
+            VIPTierPack(
+                id: "vip_pack_bronze", tier: .bronze,
+                name: "Bronze Initiate Pack",
+                description: "A welcome gift for reaching Bronze VIP. A solid boost to get rolling.",
+                productID: ProductIDs.vipTierPackBronze,
+                shards: 200, crystals: 3, relicMaterials: 25,
+                boostMultiplier: 2, boostMinutes: 60,
+                exclusiveCosmeticID: "skin_vip_bronze"
+            ),
+            VIPTierPack(
+                id: "vip_pack_silver", tier: .silver,
+                name: "Silver Vanguard Pack",
+                description: "Exclusive to Silver VIP members. Premium resources and a unique particle effect.",
+                productID: ProductIDs.vipTierPackSilver,
+                shards: 600, crystals: 10, relicMaterials: 75,
+                boostMultiplier: 3, boostMinutes: 120,
+                exclusiveCosmeticID: "particle_vip_silver_trail"
+            ),
+            VIPTierPack(
+                id: "vip_pack_gold", tier: .gold,
+                name: "Gold Sovereign Pack",
+                description: "Fit for temporal royalty. Massive resources and an exclusive golden relic skin.",
+                productID: ProductIDs.vipTierPackGold,
+                shards: 1500, crystals: 30, relicMaterials: 200,
+                boostMultiplier: 5, boostMinutes: 240,
+                exclusiveCosmeticID: "relic_vip_gold_crown"
+            ),
+            VIPTierPack(
+                id: "vip_pack_diamond", tier: .diamond,
+                name: "Diamond Ascendant Pack",
+                description: "Only the most dedicated reach Diamond. An extraordinary haul of resources and an animated avatar.",
+                productID: ProductIDs.vipTierPackDiamond,
+                shards: 4000, crystals: 80, relicMaterials: 400,
+                boostMultiplier: 8, boostMinutes: 480,
+                exclusiveCosmeticID: "avatar_vip_diamond_ascendant"
+            ),
+            VIPTierPack(
+                id: "vip_pack_obsidian", tier: .obsidian,
+                name: "Obsidian Eternal Pack",
+                description: "The pinnacle of VIP. A legendary cache of resources, an animated theme, and eternal bragging rights.",
+                productID: ProductIDs.vipTierPackObsidian,
+                shards: 10000, crystals: 200, relicMaterials: 1000,
+                boostMultiplier: 10, boostMinutes: 720,
+                exclusiveCosmeticID: "theme_vip_obsidian_eternal"
             )
         ]
     }

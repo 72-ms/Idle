@@ -13,6 +13,7 @@ struct ShopView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 28) {
+                vipStatusSection
                 premiumBundlesSection
                 currencyPacksSection
                 boostersAndWarpsSection
@@ -304,11 +305,62 @@ struct ShopView: View {
         VStack(alignment: .leading, spacing: 16) {
             sectionHeader("Subscriptions", symbol: "crown.fill")
 
-            // Chrono Pass
             chronoPassCard
 
-            // VIP
-            vipCard
+            // VIP subscription (earns VIP points monthly + passive perks)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: "crown.fill")
+                        .foregroundStyle(.mint)
+                    Text("VIP Monthly")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.white)
+                    Spacer()
+                    if store.isVIPActive {
+                        Text("Active")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.black)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(.mint)
+                            .clipShape(Capsule())
+                    }
+                    Text("+1000 pts/mo")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Label("2x offline earnings while active", systemImage: "checkmark")
+                    Label("50 Chrono Shards daily while active", systemImage: "checkmark")
+                    Label("1000 VIP Points each billing cycle", systemImage: "checkmark")
+                    Label("Ad-free experience", systemImage: "checkmark")
+                }
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.65))
+
+                if !store.isVIPActive {
+                    Button {
+                        Task {
+                            isPurchasing = true
+                            _ = await store.purchaseVIP()
+                            isPurchasing = false
+                        }
+                    } label: {
+                        Text(store.vipProduct?.displayPrice.map { "\($0)/month" } ?? "Subscribe")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.black)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(.mint)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                    .disabled(isPurchasing)
+                }
+            }
+            .padding(16)
+            .background(cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
     }
 
@@ -367,62 +419,199 @@ struct ShopView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private var vipCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "crown.fill")
-                    .foregroundStyle(.mint)
-                Text("VIP Membership")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.white)
-                Spacer()
-                if store.isVIPActive {
-                    Text("Active")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.black)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(.mint)
-                        .clipShape(Capsule())
-                }
-            }
+    // MARK: - VIP Status
 
-            VStack(alignment: .leading, spacing: 4) {
-                vipPerk("2x offline earnings")
-                vipPerk("50 Chrono Shards daily")
-                vipPerk("Exclusive VIP avatar frame")
-                vipPerk("Priority queue for seasonal events")
-                vipPerk("Ad-free experience")
-            }
+    private var vipStatusSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionHeader("VIP Status", symbol: "crown.fill")
 
-            if !store.isVIPActive {
-                Button {
-                    Task {
-                        isPurchasing = true
-                        _ = await store.purchaseVIP()
-                        isPurchasing = false
+            // Status card with tier + progress
+            VStack(spacing: 16) {
+                // Current tier display
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(vipTierColor(store.vipProgress.currentTier).opacity(0.15))
+                            .frame(width: 52, height: 52)
+                        Image(systemName: store.vipProgress.currentTier.symbolName)
+                            .font(.title2)
+                            .foregroundStyle(vipTierColor(store.vipProgress.currentTier))
                     }
-                } label: {
-                    Text(store.vipProduct?.displayPrice.map { "\($0)/month" } ?? "Subscribe")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.black)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(.mint)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 8) {
+                            Text(store.vipProgress.currentTier == .none
+                                 ? "No VIP Tier"
+                                 : "\(store.vipProgress.currentTier.displayName) VIP")
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(.white)
+
+                            if store.vipProgress.currentTier != .none {
+                                Text(store.vipProgress.currentTier.displayName)
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(.black)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(vipTierColor(store.vipProgress.currentTier))
+                                    .clipShape(Capsule())
+                            }
+                        }
+
+                        Text("\(store.vipProgress.totalPoints) VIP Points")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.white.opacity(0.6))
+                    }
+
+                    Spacer()
                 }
-                .disabled(isPurchasing)
+
+                // Progress to next tier
+                if let next = store.vipProgress.nextTier {
+                    VStack(spacing: 6) {
+                        HStack {
+                            Text("Next: \(next.displayName)")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(vipTierColor(next))
+                            Spacer()
+                            Text("\(store.vipProgress.pointsToNextTier ?? 0) pts to go")
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.white.opacity(0.5))
+                        }
+
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Color.white.opacity(0.08))
+                                Capsule()
+                                    .fill(LinearGradient(
+                                        colors: [vipTierColor(store.vipProgress.currentTier),
+                                                 vipTierColor(next)],
+                                        startPoint: .leading, endPoint: .trailing
+                                    ))
+                                    .frame(width: max(0, geo.size.width * store.vipProgress.progressToNextTier))
+                            }
+                        }
+                        .frame(height: 8)
+                    }
+                } else {
+                    Text("Maximum VIP tier reached")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(vipTierColor(.obsidian))
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
+
+                Text("Every purchase earns VIP Points based on its value.")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.4))
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
+            .padding(16)
+            .background(cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(vipTierColor(store.vipProgress.currentTier).opacity(0.25), lineWidth: 1)
+            )
+
+            // Current tier perks
+            if store.vipProgress.currentTier != .none {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Your Perks")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white.opacity(0.7))
+
+                    ForEach(Array(store.vipProgress.currentTier.perks.enumerated()), id: \.offset) { _, perk in
+                        Label(perk.displayText, systemImage: "checkmark")
+                            .font(.caption)
+                            .foregroundStyle(vipTierColor(store.vipProgress.currentTier).opacity(0.85))
+                    }
+                }
+                .padding(14)
+                .background(cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+
+            // VIP tier packs
+            vipTierPacksList
         }
-        .padding(16)
-        .background(cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private func vipPerk(_ text: String) -> some View {
-        Label(text, systemImage: "checkmark")
-            .font(.caption)
-            .foregroundStyle(.white.opacity(0.7))
+    private var vipTierPacksList: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Tier Exclusive Packs")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.white.opacity(0.7))
+
+            ForEach(store.vipTierPacks) { pack in
+                let isUnlocked = store.vipProgress.currentTier >= pack.tier
+                let isClaimed = store.vipProgress.hasClaimed(pack.tier)
+
+                HStack(spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(vipTierColor(pack.tier).opacity(isUnlocked ? 0.15 : 0.05))
+                            .frame(width: 40, height: 40)
+                        Image(systemName: pack.tier.symbolName)
+                            .font(.body)
+                            .foregroundStyle(isUnlocked ? vipTierColor(pack.tier) : .white.opacity(0.2))
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(pack.name)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(isUnlocked ? .white : .white.opacity(0.35))
+
+                        if !isUnlocked {
+                            Text("Reach \(pack.tier.displayName) VIP to unlock")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.white.opacity(0.3))
+                        } else {
+                            HStack(spacing: 6) {
+                                vipPackTag("\(pack.shards) Shards")
+                                vipPackTag("\(pack.crystals) Crystals")
+                            }
+                        }
+                    }
+
+                    Spacer(minLength: 0)
+
+                    if isClaimed {
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundStyle(vipTierColor(pack.tier))
+                    } else if isUnlocked {
+                        Button {
+                            Task {
+                                isPurchasing = true
+                                _ = await store.purchaseVIPTierPack(pack)
+                                isPurchasing = false
+                            }
+                        } label: {
+                            Text(store.product(forVIPTierPack: pack)?.displayPrice ?? "Buy")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.black)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(vipTierColor(pack.tier))
+                                .clipShape(Capsule())
+                        }
+                        .disabled(isPurchasing)
+                    } else {
+                        Image(systemName: "lock.fill")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.2))
+                    }
+                }
+                .padding(10)
+                .background(cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .opacity(isUnlocked ? 1.0 : 0.6)
+            }
+        }
+    }
+
+    private func vipPackTag(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 9))
+            .foregroundStyle(.white.opacity(0.5))
     }
 
     // MARK: - Cosmetics
@@ -832,5 +1021,18 @@ struct ShopView: View {
             Text(text)
         }
         .foregroundStyle(.white.opacity(0.5))
+    }
+
+    // MARK: - VIP Helpers
+
+    private func vipTierColor(_ tier: VIPTier) -> Color {
+        switch tier {
+        case .none: return .gray
+        case .bronze: return Color(red: 0.80, green: 0.50, blue: 0.20)
+        case .silver: return Color(red: 0.75, green: 0.75, blue: 0.80)
+        case .gold: return Color(red: 1.0, green: 0.84, blue: 0.0)
+        case .diamond: return Color(red: 0.53, green: 0.81, blue: 0.98)
+        case .obsidian: return Color(red: 0.60, green: 0.20, blue: 0.90)
+        }
     }
 }

@@ -609,6 +609,23 @@ class GameEngine {
                 player.ownedCosmetics.insert(cosmeticID)
             }
             recalculateProduction()
+
+        case .vipTierPack(let shards, let crystals, let relicMaterials,
+                          let boostMultiplier, let boostMinutes, let cosmeticID):
+            player.chronoShards += shards
+            player.totalChronoShardsEarned += shards
+            player.skillTree.availablePoints += shards
+            player.epochCrystals += crystals
+            player.relicMaterials += relicMaterials
+            player.activeBoostMultiplier = boostMultiplier
+            player.boostExpirationDate = Date().addingTimeInterval(TimeInterval(boostMinutes * 60))
+            if let cosmeticID {
+                player.ownedCosmetics.insert(cosmeticID)
+            }
+            recalculateProduction()
+
+        case .vipCosmeticGrant(let cosmeticID):
+            player.ownedCosmetics.insert(cosmeticID)
         }
 
         save()
