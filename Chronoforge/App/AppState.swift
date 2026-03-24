@@ -13,6 +13,7 @@ class AppState {
     let guildManager: GuildManager
     let profileManager: ProfileManager
     let announcementManager: AnnouncementManager
+    let liveEventManager: LiveEventManager
 
     init() {
         let saveManager = SaveManager()
@@ -31,6 +32,7 @@ class AppState {
         self.guildManager = GuildManager()
         self.profileManager = ProfileManager()
         self.announcementManager = AnnouncementManager()
+        self.liveEventManager = LiveEventManager()
 
         // Wire up consumable purchase delivery
         let engineRef = self.engine
@@ -75,9 +77,27 @@ class AppState {
             )
         }
 
+        // Wire live event progress updates into engine tick
+        let liveEventRef = self.liveEventManager
+        engine.onLiveEventTick = { [weak engineRef] in
+            guard let engine = engineRef else { return }
+            liveEventRef.updateProgress(player: engine.player)
+        }
+
+        // Wire live event boost rewards back to the engine
+        liveEventManager.onReward = { [weak engineRef] reward in
+            guard let engine = engineRef else { return }
+            if case .productionBoost(let mult, let mins) = reward {
+                engine.player.activeBoostMultiplier = mult
+                engine.player.boostExpirationDate = Date().addingTimeInterval(TimeInterval(mins * 60))
+                engine.recalculateProduction()
+            }
+        }
+
         // Sync seasonal event bonus and deliver VIP daily rewards on launch
         syncSeasonalBonus()
         deliverVIPDailyRewards()
+        liveEventManager.start()
 
         engine.start()
         Task {

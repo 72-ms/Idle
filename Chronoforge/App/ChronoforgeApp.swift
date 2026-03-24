@@ -16,6 +16,7 @@ struct ChronoforgeApp: App {
                 .environment(appState.guildManager)
                 .environment(appState.profileManager)
                 .environment(appState.announcementManager)
+                .environment(appState.liveEventManager)
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
                     appState.handleAppWillResignActive()
                 }

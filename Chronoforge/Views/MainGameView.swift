@@ -9,6 +9,7 @@ struct MainGameView: View {
     @Environment(GuildManager.self) private var guildManager
     @Environment(StoreManager.self) private var store
     @Environment(AnnouncementManager.self) private var announcements
+    @Environment(LiveEventManager.self) private var liveEventManager
 
     @State private var showPrestige = false
     @State private var showSettings = false
@@ -168,6 +169,8 @@ struct MainGameView: View {
                 GuildHubView()
             case .seasonalEvent:
                 SeasonalEventView()
+            case .liveEvent:
+                LiveEventView()
             case .profile:
                 ProfileView(
                     profile: PlayerProfile.fromLocal(player: player, vipTier: store.vipProgress.currentTier),
@@ -203,6 +206,14 @@ struct MainGameView: View {
 
             // More menu
             Menu {
+                if liveEventManager.currentEvent != nil {
+                    Button {
+                        selectedTab = .liveEvent
+                    } label: {
+                        Label("Live Event", systemImage: "flame.circle.fill")
+                    }
+                }
+
                 if !player.activeContracts.isEmpty || player.completedContractCount > 0 {
                     Button {
                         selectedTab = .contracts
@@ -379,5 +390,6 @@ enum GameTab: String {
     case leaderboard
     case guild
     case seasonalEvent
+    case liveEvent
     case profile
 }

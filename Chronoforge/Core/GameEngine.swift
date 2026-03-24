@@ -29,6 +29,9 @@ class GameEngine {
     /// Set by AppState to post global announcements.
     var onAchievementUnlocked: ((AchievementConfig) -> Void)?
 
+    /// Called periodically (~every 5s) to update live event progress.
+    var onLiveEventTick: (() -> Void)?
+
     init(player: PlayerState, saveManager: SaveManager) {
         self.player = player
         self.saveManager = saveManager
@@ -578,11 +581,12 @@ class GameEngine {
             }
         }
 
-        // Periodically check contracts and achievements (every ~5 seconds)
+        // Periodically check contracts, achievements, and live events (every ~5 seconds)
         tickCounter += 1
         if tickCounter % 50 == 0 {
             updateContractProgress()
             checkAchievements()
+            onLiveEventTick?()
         }
 
         player.totalPlayTime += delta
