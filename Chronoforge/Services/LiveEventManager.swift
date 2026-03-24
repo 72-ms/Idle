@@ -322,8 +322,6 @@ final class LiveEventManager {
         guard let event = currentEvent else { return false }
         guard let pack = event.packs.first(where: { $0.id == packId }) else { return false }
         guard !player.liveEventState.claimedPacks.contains(packId) else { return false }
-
-        // Free packs are always claimable; paid packs would go through StoreManager
         guard pack.isFree else { return false }
 
         player.liveEventState.claimedPacks.insert(packId)
@@ -331,6 +329,28 @@ final class LiveEventManager {
             deliverReward(reward, to: player)
         }
         return true
+    }
+
+    /// Called after a successful StoreKit purchase to deliver a paid event pack.
+    func deliverPaidPack(packId: String, player: PlayerState) -> Bool {
+        guard let event = currentEvent else { return false }
+        guard let pack = event.packs.first(where: { $0.id == packId }) else { return false }
+        guard !player.liveEventState.claimedPacks.contains(packId) else { return false }
+        guard !pack.isFree else { return false }
+
+        player.liveEventState.claimedPacks.insert(packId)
+        for reward in pack.rewards {
+            deliverReward(reward, to: player)
+        }
+        return true
+    }
+
+    /// Returns the product ID for a paid pack so the view can initiate a StoreKit purchase.
+    func productId(for packId: String) -> String? {
+        guard let event = currentEvent else { return nil }
+        guard let pack = event.packs.first(where: { $0.id == packId }) else { return nil }
+        guard !pack.isFree else { return nil }
+        return pack.productId
     }
 
     // MARK: - Reward Delivery

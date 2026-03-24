@@ -123,10 +123,14 @@ class AppState {
         engine.collectOfflineEarnings()
         engine.recalculateProduction()
         engine.start()
+        announcementManager.start()
+        liveEventManager.start()
     }
 
     func handleAppWillResignActive() {
         engine.stop()
+        announcementManager.stop()
+        liveEventManager.stop()
         AnalyticsManager.shared.track(.sessionEnd)
         AnalyticsManager.shared.flush()
         NotificationManager.shared.rescheduleNotifications()

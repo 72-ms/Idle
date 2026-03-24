@@ -3,6 +3,7 @@ import SwiftUI
 struct LiveEventView: View {
     @Environment(LiveEventManager.self) private var eventManager
     @Environment(PlayerState.self) private var player
+    @Environment(StoreManager.self) private var store
     @Environment(GameEngine.self) private var engine
     @State private var selectedDay: Int = 0
 
@@ -472,13 +473,19 @@ struct LiveEventView: View {
                                 .clipShape(Capsule())
                         }
                     } else {
-                        Text(pack.price)
-                            .font(.caption.weight(.bold))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(isWhale ? Color.yellow.opacity(0.2) : themeAccent(event.theme).opacity(0.15))
-                            .foregroundStyle(isWhale ? .yellow : themeAccent(event.theme))
-                            .clipShape(Capsule())
+                        Button {
+                            Task {
+                                await purchasePack(pack)
+                            }
+                        } label: {
+                            Text(pack.price)
+                                .font(.caption.weight(.bold))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(isWhale ? Color.yellow.opacity(0.2) : themeAccent(event.theme).opacity(0.15))
+                                .foregroundStyle(isWhale ? .yellow : themeAccent(event.theme))
+                                .clipShape(Capsule())
+                        }
                     }
                 }
                 .padding(12)
@@ -594,5 +601,20 @@ struct LiveEventView: View {
         if days <= 0 { return "today" }
         if days == 1 { return "tomorrow" }
         return "in \(days) days"
+    }
+
+    private func purchasePack(_ pack: LiveEventPack) async {
+        guard let productId = eventManager.productId(for: pack.id) else { return }
+
+        // Find the StoreKit product matching this event pack
+        guard let product = store.products.first(where: { $0.id == productId }) else {
+            // Product not loaded from App Store — fall through silently
+            return
+        }
+
+        let success = await store.purchase(product)
+        if success {
+            _ = eventManager.deliverPaidPack(packId: pack.id, player: player)
+        }
     }
 }
