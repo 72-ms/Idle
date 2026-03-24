@@ -16,6 +16,9 @@ final class GuildManager {
     /// Callback for delivering guild perk rewards (daily shards, raid rewards).
     var onReward: ((GuildReward) -> Void)?
 
+    /// Called whenever guild level or bonuses change (e.g. after a donation triggers a level-up).
+    var onBonusChanged: (() -> Void)?
+
     enum GuildReward {
         case dailyShards(Int)
         case raidComplete(shards: Int, crystals: Int, relicMaterials: Int)
@@ -112,6 +115,7 @@ final class GuildManager {
 
         // Remove from browse list
         availableGuilds.removeAll { $0.id == guild.id }
+        onBonusChanged?()
         save()
         return true
     }
@@ -128,6 +132,7 @@ final class GuildManager {
         player.guildId = nil
         player.guildName = nil
         player.guildRole = nil
+        onBonusChanged?()
         save()
     }
 
@@ -175,6 +180,7 @@ final class GuildManager {
             )
         )
         currentGuild = guild
+        onBonusChanged?()
         save()
         return true
     }

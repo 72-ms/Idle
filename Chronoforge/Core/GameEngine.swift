@@ -10,6 +10,7 @@ class GameEngine {
     private var lastTickTime: Date = Date()
     private var materialAccumulator: Double = 0
     private var autoTapAccumulator: Double = 0
+    private var seasonalCurrencyAccumulator: Double = 0
     private var tickCounter: Int = 0
 
     private(set) var totalProductionRate: Decimal = 0
@@ -20,6 +21,13 @@ class GameEngine {
 
     /// External multiplier supplied by GuildManager (guild level offline bonus).
     var guildOfflineMultiplier: Decimal = 1
+
+    /// External multiplier from the active seasonal event.
+    var seasonalMultiplier: Decimal = 1
+
+    /// Called when a Chronarch-tier player unlocks an achievement.
+    /// Set by AppState to post global announcements.
+    var onAchievementUnlocked: ((AchievementConfig) -> Void)?
 
     init(player: PlayerState, saveManager: SaveManager) {
         self.player = player
@@ -516,6 +524,9 @@ class GameEngine {
             default:
                 break
             }
+
+            // Notify for Chronarch-tier global announcements
+            onAchievementUnlocked?(achievement)
         }
     }
 
@@ -544,6 +555,16 @@ class GameEngine {
                 let dropped = Int(materialAccumulator)
                 player.relicMaterials += dropped
                 materialAccumulator -= Double(dropped)
+            }
+        }
+
+        // Accumulate seasonal event currency while an event is active
+        if seasonalMultiplier > 1, player.seasonalEventState.currentEventId != nil, activeGeneratorCount > 0 {
+            seasonalCurrencyAccumulator += Double(activeGeneratorCount) * 0.005 * delta
+            if seasonalCurrencyAccumulator >= 1.0 {
+                let earned = Int(seasonalCurrencyAccumulator)
+                player.seasonalEventState.earnedCurrency += earned
+                seasonalCurrencyAccumulator -= Double(earned)
             }
         }
 
@@ -679,6 +700,11 @@ class GameEngine {
         // Apply guild production bonus
         if guildProductionMultiplier > 1 {
             total *= guildProductionMultiplier
+        }
+
+        // Apply seasonal event bonus
+        if seasonalMultiplier > 1 {
+            total *= seasonalMultiplier
         }
 
         totalProductionRate = total

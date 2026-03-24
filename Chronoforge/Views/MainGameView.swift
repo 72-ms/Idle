@@ -166,6 +166,8 @@ struct MainGameView: View {
                 LeaderboardView()
             case .guild:
                 GuildHubView()
+            case .seasonalEvent:
+                SeasonalEventView()
             case .profile:
                 ProfileView(
                     profile: PlayerProfile.fromLocal(player: player, vipTier: store.vipProgress.currentTier),
@@ -227,6 +229,14 @@ struct MainGameView: View {
                     selectedTab = .guild
                 } label: {
                     Label(guildManager.currentGuild != nil ? "Guild" : "Find Guild", systemImage: "shield.fill")
+                }
+
+                if SeasonalEventSystem.currentEvent() != nil {
+                    Button {
+                        selectedTab = .seasonalEvent
+                    } label: {
+                        Label("Seasonal Event", systemImage: "leaf.fill")
+                    }
                 }
 
                 Button {
@@ -368,5 +378,6 @@ enum GameTab: String {
     case challenges
     case leaderboard
     case guild
+    case seasonalEvent
     case profile
 }
