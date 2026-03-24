@@ -419,39 +419,55 @@ struct LiveEventView: View {
 
             ForEach(event.packs) { pack in
                 let isClaimed = state.claimedPacks.contains(pack.id)
+                let isWhale = pack.tier >= 5
 
-                HStack(spacing: 12) {
-                    Image(systemName: pack.isFree ? "gift.fill" : "bag.fill")
-                        .font(.title3)
-                        .foregroundStyle(pack.isFree ? .green : themeAccent(event.theme))
-                        .frame(width: 36)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(pack.name)
-                            .font(.subheadline.weight(.semibold))
+                VStack(spacing: 0) {
+                    // Badge banner for featured packs
+                    if let badge = pack.badge, !isClaimed {
+                        Text(badge)
+                            .font(.system(size: 9, weight: .heavy))
                             .foregroundStyle(.white)
-
-                        Text(pack.rewards.map(\.displayText).joined(separator: " + "))
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.5))
-                            .lineLimit(2)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 3)
+                            .background(
+                                isWhale
+                                ? LinearGradient(colors: [.orange, .yellow, .orange], startPoint: .leading, endPoint: .trailing)
+                                : LinearGradient(colors: [themeAccent(event.theme), themeAccent(event.theme).opacity(0.7)], startPoint: .leading, endPoint: .trailing)
+                            )
                     }
 
-                    Spacer()
+                    HStack(spacing: 12) {
+                        Image(systemName: pack.isFree ? "gift.fill" : (isWhale ? "crown.fill" : "bag.fill"))
+                            .font(.title3)
+                            .foregroundStyle(pack.isFree ? .green : (isWhale ? .yellow : themeAccent(event.theme)))
+                            .frame(width: 36)
 
-                    if isClaimed {
-                        Text("Claimed")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.green.opacity(0.7))
-                    } else if pack.isFree {
-                        Button {
-                            _ = eventManager.claimPack(packId: pack.id, player: player)
-                        } label: {
-                            Text("FREE")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(pack.name)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(isWhale ? .yellow : .white)
+
+                            Text(pack.rewards.map(\.displayText).joined(separator: " + "))
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.5))
+                                .lineLimit(2)
+                        }
+
+                        Spacer()
+
+                        if isClaimed {
+                            Text("Claimed")
                                 .font(.caption.weight(.bold))
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(.green.opacity(0.2))
+                                .foregroundStyle(.green.opacity(0.7))
+                        } else if pack.isFree {
+                            Button {
+                                _ = eventManager.claimPack(packId: pack.id, player: player)
+                            } label: {
+                                Text("FREE")
+                                    .font(.caption.weight(.bold))
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(.green.opacity(0.2))
                                 .foregroundStyle(.green)
                                 .clipShape(Capsule())
                         }
@@ -460,14 +476,24 @@ struct LiveEventView: View {
                             .font(.caption.weight(.bold))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
-                            .background(themeAccent(event.theme).opacity(0.15))
-                            .foregroundStyle(themeAccent(event.theme))
+                            .background(isWhale ? Color.yellow.opacity(0.2) : themeAccent(event.theme).opacity(0.15))
+                            .foregroundStyle(isWhale ? .yellow : themeAccent(event.theme))
                             .clipShape(Capsule())
                     }
                 }
                 .padding(12)
-                .background(pack.isFree && !isClaimed ? Color.green.opacity(0.05) : Color.white.opacity(0.03))
+                .background(
+                    isWhale && !isClaimed
+                    ? Color.yellow.opacity(0.04)
+                    : (pack.isFree && !isClaimed ? Color.green.opacity(0.05) : Color.white.opacity(0.03))
+                )
+                }
                 .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    isWhale && !isClaimed
+                    ? RoundedRectangle(cornerRadius: 12).strokeBorder(Color.yellow.opacity(0.2), lineWidth: 1)
+                    : nil
+                )
             }
         }
         .padding(16)

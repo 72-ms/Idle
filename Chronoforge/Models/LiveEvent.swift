@@ -177,13 +177,18 @@ enum LiveEventReward: Codable {
 // MARK: - Event Pack Tier
 
 /// An event-specific bundle pack with escalating value.
+/// Tier 0 is free (hooks players in), tiers 1-6 escalate from impulse buy to whale territory.
+/// Each tier is purchasable once per event. Value-per-dollar improves at higher tiers
+/// to incentivize bigger spends.
 struct LiveEventPack: Codable, Identifiable {
     let id: String
     let tier: Int           // 0 = free, 1+ = paid
     let name: String
-    let price: String       // "$0.00" for free, "$X.99" for paid
+    let price: String       // "Free" or "$X.99"
+    let productId: String   // StoreKit product ID
     let rewards: [LiveEventReward]
     let isFree: Bool
+    let badge: String?      // Optional badge text like "BEST VALUE", "LIMITED"
 
     static func freePack(eventId: String) -> LiveEventPack {
         LiveEventPack(
@@ -191,70 +196,120 @@ struct LiveEventPack: Codable, Identifiable {
             tier: 0,
             name: "Starter Pack",
             price: "Free",
+            productId: "",
             rewards: [
                 .eventPoints(500),
                 .chronoShards(25),
                 .relicMaterials(10)
             ],
-            isFree: true
+            isFree: true,
+            badge: nil
         )
     }
 
     static func paidPacks(eventId: String) -> [LiveEventPack] {
         [
+            // Tier 1 — Impulse buy, low barrier to entry
             LiveEventPack(
                 id: "\(eventId)_pack_1",
                 tier: 1, name: "Bronze Event Pack",
                 price: "$0.99",
+                productId: "com.chronoforge.event.pack.bronze",
                 rewards: [
-                    .eventPoints(2000),
+                    .eventPoints(2_000),
                     .chronoShards(100),
                     .relicMaterials(25),
                     .productionBoost(multiplier: 2, minutes: 60)
                 ],
-                isFree: false
+                isFree: false,
+                badge: nil
             ),
+            // Tier 2 — Light spender, 2.5x better value than Tier 1
             LiveEventPack(
                 id: "\(eventId)_pack_2",
                 tier: 2, name: "Silver Event Pack",
                 price: "$4.99",
+                productId: "com.chronoforge.event.pack.silver",
                 rewards: [
-                    .eventPoints(8000),
-                    .chronoShards(500),
+                    .eventPoints(12_000),
+                    .chronoShards(600),
                     .epochCrystals(15),
-                    .relicMaterials(75),
-                    .productionBoost(multiplier: 5, minutes: 60)
+                    .relicMaterials(80),
+                    .productionBoost(multiplier: 3, minutes: 120)
                 ],
-                isFree: false
+                isFree: false,
+                badge: nil
             ),
+            // Tier 3 — Mid spender, crossing the $10 threshold
             LiveEventPack(
                 id: "\(eventId)_pack_3",
                 tier: 3, name: "Gold Event Pack",
-                price: "$19.99",
+                price: "$9.99",
+                productId: "com.chronoforge.event.pack.gold",
                 rewards: [
-                    .eventPoints(30000),
-                    .chronoShards(2500),
-                    .epochCrystals(50),
+                    .eventPoints(30_000),
+                    .chronoShards(2_000),
+                    .epochCrystals(40),
                     .relicMaterials(200),
-                    .productionBoost(multiplier: 10, minutes: 120),
-                    .eventToken(10)
+                    .productionBoost(multiplier: 5, minutes: 120),
+                    .eventToken(8)
                 ],
-                isFree: false
+                isFree: false,
+                badge: "POPULAR"
             ),
+            // Tier 4 — Committed spender
             LiveEventPack(
                 id: "\(eventId)_pack_4",
-                tier: 4, name: "Diamond Event Pack",
-                price: "$49.99",
+                tier: 4, name: "Platinum Event Pack",
+                price: "$19.99",
+                productId: "com.chronoforge.event.pack.platinum",
                 rewards: [
-                    .eventPoints(100000),
-                    .chronoShards(10000),
-                    .epochCrystals(150),
-                    .relicMaterials(500),
-                    .productionBoost(multiplier: 10, minutes: 240),
-                    .eventToken(50),
-                    .cosmetic("event_exclusive_pack_aura")
+                    .eventPoints(75_000),
+                    .chronoShards(5_000),
+                    .epochCrystals(100),
+                    .relicMaterials(400),
+                    .productionBoost(multiplier: 10, minutes: 180),
+                    .eventToken(25)
                 ],
-                isFree: false
+                isFree: false,
+                badge: nil
+            ),
+            // Tier 5 — Whale entry, big jump in exclusive content
+            LiveEventPack(
+                id: "\(eventId)_pack_5",
+                tier: 5, name: "Diamond Event Pack",
+                price: "$49.99",
+                productId: "com.chronoforge.event.pack.diamond",
+                rewards: [
+                    .eventPoints(200_000),
+                    .chronoShards(15_000),
+                    .epochCrystals(250),
+                    .relicMaterials(800),
+                    .productionBoost(multiplier: 10, minutes: 360),
+                    .eventToken(60),
+                    .cosmetic("event_exclusive_diamond_aura")
+                ],
+                isFree: false,
+                badge: "BEST VALUE"
+            ),
+            // Tier 6 — Whale pack, nearly guarantees top event milestones
+            LiveEventPack(
+                id: "\(eventId)_pack_6",
+                tier: 6, name: "Chronarch Event Pack",
+                price: "$99.99",
+                productId: "com.chronoforge.event.pack.chronarch",
+                rewards: [
+                    .eventPoints(500_000),
+                    .chronoShards(40_000),
+                    .epochCrystals(600),
+                    .relicMaterials(2_000),
+                    .productionBoost(multiplier: 15, minutes: 480),
+                    .eventToken(150),
+                    .cosmetic("event_exclusive_chronarch_frame"),
+                    .cosmetic("event_exclusive_chronarch_title")
+                ],
+                isFree: false,
+                badge: "LIMITED"
             )
         ]
     }
