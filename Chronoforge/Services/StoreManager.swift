@@ -154,6 +154,10 @@ enum VIPTier: Int, Codable, CaseIterable, Comparable {
     case gold = 3
     case diamond = 4
     case obsidian = 5
+    case mythic = 6
+    case eternal = 7
+    case celestial = 8
+    case chronarch = 9
 
     static func < (lhs: VIPTier, rhs: VIPTier) -> Bool {
         lhs.rawValue < rhs.rawValue
@@ -167,17 +171,25 @@ enum VIPTier: Int, Codable, CaseIterable, Comparable {
         case .gold: return "Gold"
         case .diamond: return "Diamond"
         case .obsidian: return "Obsidian"
+        case .mythic: return "Mythic"
+        case .eternal: return "Eternal"
+        case .celestial: return "Celestial"
+        case .chronarch: return "Chronarch"
         }
     }
 
     var pointsRequired: Int {
         switch self {
         case .none: return 0
-        case .bronze: return 100
-        case .silver: return 500
-        case .gold: return 2000
-        case .diamond: return 8000
-        case .obsidian: return 25000
+        case .bronze: return 100         // ~$1
+        case .silver: return 500         // ~$5
+        case .gold: return 2_000         // ~$20
+        case .diamond: return 8_000      // ~$80
+        case .obsidian: return 25_000    // ~$250
+        case .mythic: return 75_000      // ~$750
+        case .eternal: return 200_000    // ~$2,000
+        case .celestial: return 500_000  // ~$5,000
+        case .chronarch: return 1_500_000 // ~$15,000
         }
     }
 
@@ -193,6 +205,10 @@ enum VIPTier: Int, Codable, CaseIterable, Comparable {
         case .gold: return "crown.fill"
         case .diamond: return "diamond.fill"
         case .obsidian: return "sparkle"
+        case .mythic: return "flame.fill"
+        case .eternal: return "infinity"
+        case .celestial: return "sun.max.fill"
+        case .chronarch: return "bolt.ring.closed"
         }
     }
 
@@ -222,7 +238,8 @@ enum VIPTier: Int, Codable, CaseIterable, Comparable {
                 .offlineBonus(0.3),
                 .exclusiveAvatar("vip_gold_frame"),
                 .shopDiscount(0.10),
-                .bonusCurrencyOnPurchase(0.10)
+                .bonusCurrencyOnPurchase(0.10),
+                .animatedNameColor("vip_gold_shimmer")
             ]
         case .diamond:
             return [
@@ -232,7 +249,10 @@ enum VIPTier: Int, Codable, CaseIterable, Comparable {
                 .exclusiveAvatar("vip_diamond_frame"),
                 .shopDiscount(0.15),
                 .bonusCurrencyOnPurchase(0.20),
-                .exclusiveParticle("vip_diamond_aura")
+                .exclusiveParticle("vip_diamond_aura"),
+                .animatedNameColor("vip_diamond_sparkle"),
+                .profileBorder("vip_diamond_border"),
+                .leaderboardBadge
             ]
         case .obsidian:
             return [
@@ -244,35 +264,173 @@ enum VIPTier: Int, Codable, CaseIterable, Comparable {
                 .bonusCurrencyOnPurchase(0.35),
                 .exclusiveParticle("vip_obsidian_void"),
                 .exclusiveTheme("vip_obsidian_theme"),
-                .leaderboardBadge
+                .animatedNameColor("vip_obsidian_pulse"),
+                .profileBorder("vip_obsidian_border"),
+                .leaderboardBadge,
+                .exclusiveTitle("Void Walker")
+            ]
+        case .mythic:
+            return [
+                .productionBonus(3.5),
+                .dailyShards(1000),
+                .dailyCrystals(10),
+                .offlineBonus(1.5),
+                .exclusiveAvatar("vip_mythic_frame_animated"),
+                .shopDiscount(0.25),
+                .bonusCurrencyOnPurchase(0.50),
+                .exclusiveParticle("vip_mythic_inferno"),
+                .exclusiveTheme("vip_mythic_theme"),
+                .animatedNameColor("vip_mythic_flame"),
+                .profileBorder("vip_mythic_border_animated"),
+                .leaderboardBadge,
+                .exclusiveTitle("Mythic Forger"),
+                .chatFlair("vip_mythic_flair"),
+                .prestigeBonus(0.15)
+            ]
+        case .eternal:
+            return [
+                .productionBonus(5.0),
+                .dailyShards(2500),
+                .dailyCrystals(30),
+                .offlineBonus(2.0),
+                .exclusiveAvatar("vip_eternal_frame_animated"),
+                .shopDiscount(0.30),
+                .bonusCurrencyOnPurchase(0.75),
+                .exclusiveParticle("vip_eternal_stardust"),
+                .exclusiveTheme("vip_eternal_theme"),
+                .animatedNameColor("vip_eternal_aurora"),
+                .profileBorder("vip_eternal_border_animated"),
+                .leaderboardBadge,
+                .exclusiveTitle("Eternal Sovereign"),
+                .chatFlair("vip_eternal_flair"),
+                .prestigeBonus(0.25),
+                .tapMultiplier(2.0),
+                .exclusiveGeneratorSkin("vip_eternal_generators"),
+                .prioritySupport
+            ]
+        case .celestial:
+            return [
+                .productionBonus(8.0),
+                .dailyShards(5000),
+                .dailyCrystals(75),
+                .dailyRelicMaterials(50),
+                .offlineBonus(3.0),
+                .exclusiveAvatar("vip_celestial_frame_animated"),
+                .shopDiscount(0.35),
+                .bonusCurrencyOnPurchase(1.0),
+                .exclusiveParticle("vip_celestial_nebula"),
+                .exclusiveTheme("vip_celestial_theme"),
+                .animatedNameColor("vip_celestial_supernova"),
+                .profileBorder("vip_celestial_border_animated"),
+                .leaderboardBadge,
+                .exclusiveTitle("Celestial Architect"),
+                .chatFlair("vip_celestial_flair"),
+                .prestigeBonus(0.40),
+                .tapMultiplier(3.0),
+                .exclusiveGeneratorSkin("vip_celestial_generators"),
+                .prioritySupport,
+                .seasonalHeadStart(hours: 24),
+                .exclusiveRelicSlot
+            ]
+        case .chronarch:
+            return [
+                .productionBonus(15.0),
+                .dailyShards(10000),
+                .dailyCrystals(150),
+                .dailyRelicMaterials(100),
+                .offlineBonus(5.0),
+                .exclusiveAvatar("vip_chronarch_frame_legendary"),
+                .shopDiscount(0.40),
+                .bonusCurrencyOnPurchase(1.5),
+                .exclusiveParticle("vip_chronarch_singularity"),
+                .exclusiveTheme("vip_chronarch_theme"),
+                .animatedNameColor("vip_chronarch_reality_warp"),
+                .profileBorder("vip_chronarch_border_legendary"),
+                .leaderboardBadge,
+                .exclusiveTitle("Chronarch Supreme"),
+                .chatFlair("vip_chronarch_flair_legendary"),
+                .prestigeBonus(0.50),
+                .tapMultiplier(5.0),
+                .exclusiveGeneratorSkin("vip_chronarch_generators"),
+                .prioritySupport,
+                .seasonalHeadStart(hours: 48),
+                .exclusiveRelicSlot,
+                .globalAnnouncementOnAchievement,
+                .customProfileBackground("vip_chronarch_bg"),
+                .permanentDoublePrestige
             ]
         }
     }
 }
 
 enum VIPPerk {
-    case productionBonus(Double)        // e.g. 0.1 = +10% production
-    case dailyShards(Int)               // free shards per day
-    case offlineBonus(Double)           // e.g. 0.15 = +15% offline earnings
-    case shopDiscount(Double)           // e.g. 0.05 = 5% bonus currency on pack purchases
-    case bonusCurrencyOnPurchase(Double) // e.g. 0.10 = +10% bonus on currency pack buys
-    case exclusiveAvatar(String)        // cosmetic ID
-    case exclusiveParticle(String)      // cosmetic ID
-    case exclusiveTheme(String)         // cosmetic ID
-    case leaderboardBadge               // special badge on leaderboard
+    // Core progression perks
+    case productionBonus(Double)            // e.g. 0.1 = +10% production
+    case dailyShards(Int)                   // free shards per day
+    case dailyCrystals(Int)                 // free Epoch Crystals per day
+    case dailyRelicMaterials(Int)           // free relic mats per day
+    case offlineBonus(Double)               // e.g. 0.15 = +15% offline earnings
+    case shopDiscount(Double)               // e.g. 0.05 = 5% bonus currency on pack purchases
+    case bonusCurrencyOnPurchase(Double)    // e.g. 0.10 = +10% bonus on currency pack buys
+    case prestigeBonus(Double)              // bonus prestige currency on reset
+    case tapMultiplier(Double)              // permanent tap power multiplier
+    case permanentDoublePrestige            // all prestige rewards x2 forever
+
+    // Cosmetic / social flex perks
+    case exclusiveAvatar(String)            // cosmetic ID
+    case exclusiveParticle(String)          // cosmetic ID
+    case exclusiveTheme(String)             // cosmetic ID
+    case animatedNameColor(String)          // animated name color effect ID
+    case profileBorder(String)              // animated profile border ID
+    case exclusiveTitle(String)             // shown next to name on leaderboard/profile
+    case chatFlair(String)                  // flair shown in chat / guild messages
+    case leaderboardBadge                   // tier badge on leaderboard
+    case exclusiveGeneratorSkin(String)     // unique look for all generators
+    case customProfileBackground(String)    // custom profile page background
+    case globalAnnouncementOnAchievement    // server-wide announcement on major achievements
+
+    // Gameplay advantage perks
+    case seasonalHeadStart(hours: Int)      // early access to seasonal events
+    case exclusiveRelicSlot                 // +1 equipped relic slot
+    case prioritySupport                    // priority customer support
 
     var displayText: String {
         switch self {
         case .productionBonus(let pct): return "+\(Int(pct * 100))% production"
-        case .dailyShards(let n): return "\(n) Chrono Shards daily"
+        case .dailyShards(let n): return "\(formatNumber(n)) Chrono Shards daily"
+        case .dailyCrystals(let n): return "\(n) Epoch Crystals daily"
+        case .dailyRelicMaterials(let n): return "\(n) Relic Materials daily"
         case .offlineBonus(let pct): return "+\(Int(pct * 100))% offline earnings"
         case .shopDiscount(let pct): return "\(Int(pct * 100))% bonus on pack purchases"
         case .bonusCurrencyOnPurchase(let pct): return "+\(Int(pct * 100))% extra currency on buys"
-        case .exclusiveAvatar: return "Exclusive avatar frame"
+        case .prestigeBonus(let pct): return "+\(Int(pct * 100))% prestige rewards"
+        case .tapMultiplier(let m): return "\(Int(m))x tap power multiplier"
+        case .permanentDoublePrestige: return "Permanent 2x prestige rewards"
+        case .exclusiveAvatar: return "Exclusive animated avatar frame"
         case .exclusiveParticle: return "Exclusive particle effect"
         case .exclusiveTheme: return "Exclusive UI theme"
+        case .animatedNameColor: return "Animated name color"
+        case .profileBorder: return "Animated profile border"
+        case .exclusiveTitle(let title): return "\"\(title)\" exclusive title"
+        case .chatFlair: return "Exclusive chat flair"
         case .leaderboardBadge: return "Leaderboard VIP badge"
+        case .exclusiveGeneratorSkin: return "Exclusive generator skin"
+        case .customProfileBackground: return "Custom profile background"
+        case .globalAnnouncementOnAchievement: return "Server-wide achievement announcements"
+        case .seasonalHeadStart(let h): return "\(h)h early access to seasonal events"
+        case .exclusiveRelicSlot: return "+1 equipped relic slot"
+        case .prioritySupport: return "Priority support"
         }
+    }
+
+    private func formatNumber(_ n: Int) -> String {
+        if n >= 1000 {
+            let k = Double(n) / 1000.0
+            return k.truncatingRemainder(dividingBy: 1) == 0
+                ? "\(Int(k))K"
+                : String(format: "%.1fK", k)
+        }
+        return "\(n)"
     }
 }
 
@@ -370,9 +528,13 @@ enum VIPPointMap {
         // VIP tier packs
         case StoreManager.ProductIDs.vipTierPackBronze: return 300
         case StoreManager.ProductIDs.vipTierPackSilver: return 700
-        case StoreManager.ProductIDs.vipTierPackGold: return 1500
-        case StoreManager.ProductIDs.vipTierPackDiamond: return 5000
-        case StoreManager.ProductIDs.vipTierPackObsidian: return 15000
+        case StoreManager.ProductIDs.vipTierPackGold: return 1_500
+        case StoreManager.ProductIDs.vipTierPackDiamond: return 5_000
+        case StoreManager.ProductIDs.vipTierPackObsidian: return 15_000
+        case StoreManager.ProductIDs.vipTierPackMythic: return 50_000
+        case StoreManager.ProductIDs.vipTierPackEternal: return 150_000
+        case StoreManager.ProductIDs.vipTierPackCelestial: return 400_000
+        case StoreManager.ProductIDs.vipTierPackChronarch: return 1_000_000
 
         // Cosmetics (~$1-3 each)
         default:
@@ -432,6 +594,10 @@ final class StoreManager {
         static let vipTierPackGold = "com.chronoforge.vip.pack.gold"
         static let vipTierPackDiamond = "com.chronoforge.vip.pack.diamond"
         static let vipTierPackObsidian = "com.chronoforge.vip.pack.obsidian"
+        static let vipTierPackMythic = "com.chronoforge.vip.pack.mythic"
+        static let vipTierPackEternal = "com.chronoforge.vip.pack.eternal"
+        static let vipTierPackCelestial = "com.chronoforge.vip.pack.celestial"
+        static let vipTierPackChronarch = "com.chronoforge.vip.pack.chronarch"
 
         // Cosmetic shop prefixes
         static let cosmeticPrefix = "com.chronoforge.cosmetic."
@@ -451,7 +617,8 @@ final class StoreManager {
                 boost2x30m, boost5x30m, boost10x1h,
                 progressionBundle, legendaryBundle, titanBundle,
                 vipTierPackBronze, vipTierPackSilver, vipTierPackGold,
-                vipTierPackDiamond, vipTierPackObsidian
+                vipTierPackDiamond, vipTierPackObsidian, vipTierPackMythic,
+                vipTierPackEternal, vipTierPackCelestial, vipTierPackChronarch
             ])
         }
     }
@@ -1125,7 +1292,9 @@ final class StoreManager {
         for tier in VIPTier.allCases where tier > oldTier && tier <= newTier {
             for perk in tier.perks {
                 switch perk {
-                case .exclusiveAvatar(let id), .exclusiveParticle(let id), .exclusiveTheme(let id):
+                case .exclusiveAvatar(let id), .exclusiveParticle(let id), .exclusiveTheme(let id),
+                     .animatedNameColor(let id), .profileBorder(let id), .chatFlair(let id),
+                     .exclusiveGeneratorSkin(let id), .customProfileBackground(let id):
                     ownedCosmeticIDs.insert(id)
                     onConsumablePurchased?(.vipCosmeticGrant(id))
                 default:
@@ -1468,11 +1637,47 @@ final class StoreManager {
             VIPTierPack(
                 id: "vip_pack_obsidian", tier: .obsidian,
                 name: "Obsidian Eternal Pack",
-                description: "The pinnacle of VIP. A legendary cache of resources, an animated theme, and eternal bragging rights.",
+                description: "A legendary cache of resources, an animated theme, and bragging rights few will ever earn.",
                 productID: ProductIDs.vipTierPackObsidian,
-                shards: 10000, crystals: 200, relicMaterials: 1000,
+                shards: 10_000, crystals: 200, relicMaterials: 1_000,
                 boostMultiplier: 10, boostMinutes: 720,
                 exclusiveCosmeticID: "theme_vip_obsidian_eternal"
+            ),
+            VIPTierPack(
+                id: "vip_pack_mythic", tier: .mythic,
+                name: "Mythic Inferno Pack",
+                description: "Forged in the fires of dedication. Animated inferno cosmetics, absurd resources, and a title that commands respect.",
+                productID: ProductIDs.vipTierPackMythic,
+                shards: 30_000, crystals: 600, relicMaterials: 3_000,
+                boostMultiplier: 15, boostMinutes: 1440,
+                exclusiveCosmeticID: "avatar_vip_mythic_inferno_animated"
+            ),
+            VIPTierPack(
+                id: "vip_pack_eternal", tier: .eternal,
+                name: "Eternal Sovereign Pack",
+                description: "You have transcended time itself. An animated generator overhaul, a staggering resource trove, and the Eternal Sovereign title visible to all.",
+                productID: ProductIDs.vipTierPackEternal,
+                shards: 80_000, crystals: 1_500, relicMaterials: 8_000,
+                boostMultiplier: 20, boostMinutes: 2880,
+                exclusiveCosmeticID: "skin_vip_eternal_transcendence"
+            ),
+            VIPTierPack(
+                id: "vip_pack_celestial", tier: .celestial,
+                name: "Celestial Architect Pack",
+                description: "The cosmos bends to your will. A fully animated celestial overhaul — generators, relics, UI, and a nebula trail that everyone will see.",
+                productID: ProductIDs.vipTierPackCelestial,
+                shards: 200_000, crystals: 4_000, relicMaterials: 20_000,
+                boostMultiplier: 25, boostMinutes: 4320,
+                exclusiveCosmeticID: "theme_vip_celestial_cosmos"
+            ),
+            VIPTierPack(
+                id: "vip_pack_chronarch", tier: .chronarch,
+                name: "Chronarch Supreme Pack",
+                description: "The ultimate status. A reality-warping animated overhaul, server-wide presence, the Chronarch Supreme title, and enough resources to reshape the timeline forever.",
+                productID: ProductIDs.vipTierPackChronarch,
+                shards: 500_000, crystals: 10_000, relicMaterials: 50_000,
+                boostMultiplier: 50, boostMinutes: 10080,
+                exclusiveCosmeticID: "theme_vip_chronarch_reality_warp"
             )
         ]
     }

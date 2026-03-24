@@ -495,7 +495,7 @@ struct ShopView: View {
                 } else {
                     Text("Maximum VIP tier reached")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(vipTierColor(.obsidian))
+                        .foregroundStyle(vipTierColor(.chronarch))
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
 
@@ -1033,6 +1033,10 @@ struct ShopView: View {
         case .gold: return Color(red: 1.0, green: 0.84, blue: 0.0)
         case .diamond: return Color(red: 0.53, green: 0.81, blue: 0.98)
         case .obsidian: return Color(red: 0.60, green: 0.20, blue: 0.90)
+        case .mythic: return Color(red: 1.0, green: 0.30, blue: 0.15)
+        case .eternal: return Color(red: 0.95, green: 0.75, blue: 1.0)
+        case .celestial: return Color(red: 1.0, green: 0.95, blue: 0.60)
+        case .chronarch: return Color(red: 1.0, green: 1.0, blue: 1.0)
         }
     }
 }
