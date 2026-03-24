@@ -7,7 +7,7 @@ struct PrestigeManager {
 
     static func shardsToEarn(player: PlayerState, prestigeBonus: Decimal = 0) -> Int {
         let base = GameConfig.chronoShardsForPrestige(totalTE: player.totalTEEarned)
-        return Int(Decimal(base) * (1 + prestigeBonus))
+        return NSDecimalNumber(decimal: Decimal(base) * (1 + prestigeBonus)).intValue
     }
 
     static func resetDescription() -> (resets: [String], keeps: [String]) {

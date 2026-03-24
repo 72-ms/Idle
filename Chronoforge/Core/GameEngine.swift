@@ -153,7 +153,7 @@ class GameEngine {
     func prestigeReward() -> Int {
         let total = GameConfig.chronoShardsForPrestige(totalTE: player.totalTEEarned)
         let bonus = prestigeSkillBonus() + prestigeRelicBonus()
-        return Int(Decimal(total) * (1 + bonus))
+        return NSDecimalNumber(decimal: Decimal(total) * (1 + bonus)).intValue
     }
 
     func performPrestige() {
@@ -421,7 +421,7 @@ class GameEngine {
 
         // Award bonus prestige reward with challenge multiplier
         let baseShards = prestigeReward()
-        let bonusShards = Int(Decimal(baseShards) * (config.rewardMultiplier - 1))
+        let bonusShards = NSDecimalNumber(decimal: Decimal(baseShards) * (config.rewardMultiplier - 1)).intValue
         player.chronoShards += bonusShards
         player.totalChronoShardsEarned += bonusShards
         player.skillTree.availablePoints += bonusShards
