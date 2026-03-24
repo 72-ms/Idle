@@ -143,12 +143,25 @@ final class GameEngineTests: XCTestCase {
     func testAllGeneratorsExist() {
         XCTAssertEqual(GameConfig.generators(for: .ancient).count, 4)
         XCTAssertEqual(GameConfig.generators(for: .medieval).count, 4)
+        XCTAssertEqual(GameConfig.generators(for: .industrial).count, 4)
+        XCTAssertEqual(GameConfig.generators(for: .digital).count, 4)
+        XCTAssertEqual(GameConfig.generators(for: .cosmic).count, 4)
+        XCTAssertEqual(GameConfig.allGenerators.count, 20)
+    }
+
+    func testAllUpgradesExist() {
+        XCTAssertTrue(GameConfig.upgrades(for: .ancient).count >= 5)
+        XCTAssertTrue(GameConfig.upgrades(for: .medieval).count >= 4)
+        XCTAssertTrue(GameConfig.upgrades(for: .industrial).count >= 5)
+        XCTAssertTrue(GameConfig.upgrades(for: .digital).count >= 5)
+        XCTAssertTrue(GameConfig.upgrades(for: .cosmic).count >= 5)
     }
 
     func testAllSkillNodesExist() {
-        XCTAssertFalse(GameConfig.skillNodes(for: .acceleration).isEmpty)
-        XCTAssertFalse(GameConfig.skillNodes(for: .resonance).isEmpty)
-        XCTAssertFalse(GameConfig.skillNodes(for: .mastery).isEmpty)
+        XCTAssertEqual(GameConfig.skillNodes(for: .acceleration).count, 10)
+        XCTAssertEqual(GameConfig.skillNodes(for: .resonance).count, 10)
+        XCTAssertEqual(GameConfig.skillNodes(for: .mastery).count, 10)
+        XCTAssertEqual(GameConfig.allSkillNodes.count, 30)
     }
 
     func testEraOrdering() {
@@ -156,5 +169,109 @@ final class GameEngineTests: XCTestCase {
         XCTAssertLessThan(Era.medieval.order, Era.industrial.order)
         XCTAssertLessThan(Era.industrial.order, Era.digital.order)
         XCTAssertLessThan(Era.digital.order, Era.cosmic.order)
+    }
+
+    // MARK: - Relic Tests
+
+    func testAllRelicsExist() {
+        XCTAssertEqual(GameConfig.relics(for: .ancient).count, 4)
+        XCTAssertEqual(GameConfig.relics(for: .medieval).count, 4)
+        XCTAssertEqual(GameConfig.relics(for: .industrial).count, 4)
+        XCTAssertEqual(GameConfig.relics(for: .digital).count, 4)
+        XCTAssertEqual(GameConfig.relics(for: .cosmic).count, 4)
+        XCTAssertEqual(GameConfig.allRelics.count, 20)
+    }
+
+    func testRelicCreation() {
+        let config = GameConfig.allRelics.first!
+        let relic = Relic(from: config)
+        XCTAssertEqual(relic.configId, config.id)
+        XCTAssertEqual(relic.name, config.name)
+        XCTAssertFalse(relic.isEquipped)
+    }
+
+    func testRelicEffectDescription() {
+        let config = GameConfig.allRelics.first!
+        let relic = Relic(from: config)
+        XCTAssertFalse(relic.effectDescription.isEmpty)
+    }
+
+    func testMaxRelicSlots() {
+        let player = PlayerState()
+        XCTAssertEqual(player.maxRelicSlots, GameConfig.baseRelicSlots)
+    }
+
+    // MARK: - Daily Reward Tests
+
+    func testDailyRewardCycle() {
+        XCTAssertEqual(DailyRewardSystem.rewards.count, 7)
+        for i in 1...7 {
+            let reward = DailyRewardSystem.reward(for: i)
+            XCTAssertEqual(reward.day, i)
+        }
+    }
+
+    func testDailyRewardStateInitial() {
+        let state = DailyRewardState()
+        XCTAssertTrue(state.canClaimToday)
+        XCTAssertEqual(state.currentStreak, 0)
+    }
+
+    func testDailyRewardClaim() {
+        var state = DailyRewardState()
+        state.claim()
+        XCTAssertEqual(state.currentStreak, 1)
+        XCTAssertEqual(state.totalDaysClaimed, 1)
+        XCTAssertFalse(state.canClaimToday)
+    }
+
+    func testScaledTEReward() {
+        let base: Decimal = 1000
+        let scaled = DailyRewardSystem.scaledTEReward(baseAmount: base, playerProductionRate: 100)
+        // 100 * 300 = 30000 > 1000
+        XCTAssertEqual(scaled, 30000)
+    }
+
+    func testScaledTERewardMinimum() {
+        let base: Decimal = 50000
+        let scaled = DailyRewardSystem.scaledTEReward(baseAmount: base, playerProductionRate: 10)
+        // 10 * 300 = 3000 < 50000, so use base
+        XCTAssertEqual(scaled, 50000)
+    }
+
+    // MARK: - Player State with Relics Serialization
+
+    func testPlayerStateWithRelicsSerialization() throws {
+        let player = PlayerState()
+        player.relicMaterials = 25
+        player.totalRelicsForged = 3
+
+        let config = GameConfig.allRelics.first!
+        var relic = Relic(from: config)
+        relic.isEquipped = true
+        player.relics = [relic]
+
+        let data = try JSONEncoder().encode(player)
+        let loaded = try JSONDecoder().decode(PlayerState.self, from: data)
+
+        XCTAssertEqual(loaded.relicMaterials, 25)
+        XCTAssertEqual(loaded.totalRelicsForged, 3)
+        XCTAssertEqual(loaded.relics.count, 1)
+        XCTAssertTrue(loaded.relics.first!.isEquipped)
+    }
+
+    // MARK: - Generator Balance Tests
+
+    func testGeneratorProductionScaling() {
+        // Verify each era's generators produce more than the previous era
+        let eras = Era.allCases
+        for i in 0..<(eras.count - 1) {
+            let currentEra = eras[i]
+            let nextEra = eras[i + 1]
+            let currentMax = GameConfig.generators(for: currentEra).last!.baseProduction
+            let nextMin = GameConfig.generators(for: nextEra).first!.baseProduction
+            XCTAssertGreaterThan(nextMin, currentMax,
+                "\(nextEra.displayName) first generator should produce more than \(currentEra.displayName) last generator")
+        }
     }
 }

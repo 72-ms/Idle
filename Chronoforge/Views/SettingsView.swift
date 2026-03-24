@@ -21,6 +21,9 @@ struct SettingsView: View {
                     StatRow(label: "Total Taps", value: "\(player.totalTaps)")
                     StatRow(label: "Total Prestiges", value: "\(player.totalPrestigeCount)")
                     StatRow(label: "Chrono Shards Earned", value: "\(player.totalChronoShardsEarned)")
+                    StatRow(label: "Relics Forged", value: "\(player.totalRelicsForged)")
+                    StatRow(label: "Relic Materials", value: "\(player.relicMaterials)")
+                    StatRow(label: "Daily Streak", value: "\(player.dailyRewardState.currentStreak) days")
                     StatRow(label: "Play Time", value: formatPlayTime(player.totalPlayTime))
                 }
 

@@ -10,6 +10,7 @@ struct MainGameView: View {
     @State private var showSettings = false
     @State private var showStats = false
     @State private var showSkillTree = false
+    @State private var showDailyReward = false
 
     var body: some View {
         ZStack {
@@ -28,8 +29,22 @@ struct MainGameView: View {
             if appState.showOfflineEarnings {
                 offlineEarningsOverlay
             }
+
+            if showDailyReward {
+                Color.black.opacity(0.6)
+                    .ignoresSafeArea()
+                    .onTapGesture { showDailyReward = false }
+                DailyRewardView()
+            }
         }
         .preferredColorScheme(.dark)
+        .onAppear {
+            if engine.canClaimDailyReward() {
+                showDailyReward = true
+            }
+            NotificationManager.shared.requestPermission()
+            NotificationManager.shared.rescheduleNotifications()
+        }
     }
 
     // MARK: - Header
@@ -50,6 +65,29 @@ struct MainGameView: View {
                 Text(TEFormatter.formatRate(engine.totalProductionRate))
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(eraAccentColor)
+            }
+
+            // Secondary info row
+            HStack(spacing: 16) {
+                if player.relicMaterials > 0 {
+                    Label("\(player.relicMaterials)", systemImage: "diamond.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.orange.opacity(0.8))
+                }
+                if player.hasActiveBoost {
+                    Label("\(NSDecimalNumber(decimal: player.activeBoostMultiplier))x Boost", systemImage: "arrow.up.circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.green)
+                }
+                if engine.canClaimDailyReward() {
+                    Button {
+                        showDailyReward = true
+                    } label: {
+                        Label("Daily!", systemImage: "gift.fill")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.orange)
+                    }
+                }
             }
         }
         .padding(.vertical, 12)
@@ -90,6 +128,8 @@ struct MainGameView: View {
                 GeneratorListView()
             case .upgrades:
                 UpgradeShopView()
+            case .relics:
+                RelicForgeView()
             case .prestige:
                 PrestigeView()
             case .skills:
@@ -105,6 +145,10 @@ struct MainGameView: View {
         HStack(spacing: 0) {
             tabButton("Generators", icon: "gearshape.2", tab: .generators)
             tabButton("Upgrades", icon: "arrow.up.circle", tab: .upgrades)
+
+            if player.totalRelicsForged > 0 || player.relicMaterials >= 3 {
+                tabButton("Relics", icon: "diamond", tab: .relics)
+            }
 
             if player.totalPrestigeCount > 0 || engine.canPrestige() {
                 tabButton("Prestige", icon: "arrow.counterclockwise.circle", tab: .prestige)
@@ -229,6 +273,7 @@ struct MainGameView: View {
 enum GameTab: String {
     case generators
     case upgrades
+    case relics
     case prestige
     case skills
 }

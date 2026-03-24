@@ -29,6 +29,18 @@ class PlayerState: Codable {
     var lastOnlineTimestamp: Date = Date()
     var totalPlayTime: TimeInterval = 0
 
+    // Relics
+    var relics: [Relic] = []
+    var relicMaterials: Int = 0
+    var totalRelicsForged: Int = 0
+
+    // Daily Rewards
+    var dailyRewardState: DailyRewardState = DailyRewardState()
+
+    // Production boost (from daily rewards)
+    var activeBoostMultiplier: Decimal = 1
+    var boostExpirationDate: Date?
+
     // MARK: - Codable
 
     enum CodingKeys: String, CodingKey {
@@ -40,6 +52,9 @@ class PlayerState: Codable {
         case totalPrestigeCount, totalEpochCount, totalTaps
         case tapPower, offlineEfficiency
         case lastSaveTimestamp, lastOnlineTimestamp, totalPlayTime
+        case relics, relicMaterials, totalRelicsForged
+        case dailyRewardState
+        case activeBoostMultiplier, boostExpirationDate
     }
 
     init() {}
@@ -65,6 +80,12 @@ class PlayerState: Codable {
         lastSaveTimestamp = try container.decode(Date.self, forKey: .lastSaveTimestamp)
         lastOnlineTimestamp = try container.decode(Date.self, forKey: .lastOnlineTimestamp)
         totalPlayTime = try container.decode(TimeInterval.self, forKey: .totalPlayTime)
+        relics = try container.decodeIfPresent([Relic].self, forKey: .relics) ?? []
+        relicMaterials = try container.decodeIfPresent(Int.self, forKey: .relicMaterials) ?? 0
+        totalRelicsForged = try container.decodeIfPresent(Int.self, forKey: .totalRelicsForged) ?? 0
+        dailyRewardState = try container.decodeIfPresent(DailyRewardState.self, forKey: .dailyRewardState) ?? DailyRewardState()
+        activeBoostMultiplier = try container.decodeIfPresent(Decimal.self, forKey: .activeBoostMultiplier) ?? 1
+        boostExpirationDate = try container.decodeIfPresent(Date.self, forKey: .boostExpirationDate)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -88,6 +109,12 @@ class PlayerState: Codable {
         try container.encode(lastSaveTimestamp, forKey: .lastSaveTimestamp)
         try container.encode(lastOnlineTimestamp, forKey: .lastOnlineTimestamp)
         try container.encode(totalPlayTime, forKey: .totalPlayTime)
+        try container.encode(relics, forKey: .relics)
+        try container.encode(relicMaterials, forKey: .relicMaterials)
+        try container.encode(totalRelicsForged, forKey: .totalRelicsForged)
+        try container.encode(dailyRewardState, forKey: .dailyRewardState)
+        try container.encode(activeBoostMultiplier, forKey: .activeBoostMultiplier)
+        try container.encode(boostExpirationDate, forKey: .boostExpirationDate)
     }
 
     // MARK: - Helpers
@@ -102,6 +129,27 @@ class PlayerState: Codable {
 
     func hasUpgrade(_ upgradeId: UpgradeID) -> Bool {
         purchasedUpgrades.contains(upgradeId.rawValue)
+    }
+
+    var equippedRelics: [Relic] {
+        relics.filter { $0.isEquipped }
+    }
+
+    var maxRelicSlots: Int {
+        var slots = GameConfig.baseRelicSlots
+        for node in GameConfig.allSkillNodes {
+            let level = skillTree.level(for: node.id)
+            guard level > 0 else { continue }
+            if case .relicSlots(let perLevel) = node.effect {
+                slots += perLevel * level
+            }
+        }
+        return slots
+    }
+
+    var hasActiveBoost: Bool {
+        guard let expiration = boostExpirationDate else { return false }
+        return Date() < expiration
     }
 
     var pendingChronoShards: Int {

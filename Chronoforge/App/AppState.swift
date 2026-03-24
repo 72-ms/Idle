@@ -39,6 +39,11 @@ class AppState {
         engine.start()
     }
 
+    func handleAppWillResignActive() {
+        engine.stop()
+        NotificationManager.shared.rescheduleNotifications()
+    }
+
     func resetGame() {
         engine.stop()
         saveManager.deleteSave()

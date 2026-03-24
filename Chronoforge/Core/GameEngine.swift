@@ -8,6 +8,7 @@ class GameEngine {
     private var tickTimer: Timer?
     private var saveTimer: Timer?
     private var lastTickTime: Date = Date()
+    private var materialAccumulator: Double = 0
 
     private(set) var totalProductionRate: Decimal = 0
     private(set) var isRunning = false
@@ -24,6 +25,7 @@ class GameEngine {
         guard !isRunning else { return }
         isRunning = true
         lastTickTime = Date()
+        checkBoostExpiration()
 
         tickTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             self?.tick()
@@ -50,9 +52,9 @@ class GameEngine {
             GameConfig.maxOfflineSeconds
         )
 
-        guard offlineSeconds > 60 else { return 0 } // Minimum 1 minute offline
+        guard offlineSeconds > 60 else { return 0 }
 
-        let offlineEfficiency = player.offlineEfficiency + offlineSkillBonus()
+        let offlineEfficiency = player.offlineEfficiency + offlineSkillBonus() + offlineRelicBonus()
         let earnings = totalProductionRate * Decimal(offlineSeconds) * offlineEfficiency
 
         return earnings
@@ -70,7 +72,7 @@ class GameEngine {
     // MARK: - Game Actions
 
     func tap() {
-        let tapValue = player.tapPower * tapSkillMultiplier()
+        let tapValue = player.tapPower * tapSkillMultiplier() * tapRelicMultiplier()
         player.temporalEnergy += tapValue
         player.totalTEEarned += tapValue
         player.totalLifetimeTEEarned += tapValue
@@ -103,7 +105,7 @@ class GameEngine {
 
     func unlockEra(_ era: Era) -> Bool {
         guard !player.isEraUnlocked(era) else { return false }
-        let cost = era.unlockCost * eraDiscountMultiplier()
+        let cost = era.unlockCost * eraDiscountMultiplier() * eraRelicDiscount()
         guard player.temporalEnergy >= cost else { return false }
 
         player.temporalEnergy -= cost
@@ -120,7 +122,7 @@ class GameEngine {
 
     func prestigeReward() -> Int {
         let total = GameConfig.chronoShardsForPrestige(totalTE: player.totalTEEarned)
-        let bonus = prestigeSkillBonus()
+        let bonus = prestigeSkillBonus() + prestigeRelicBonus()
         return Int(Decimal(total) * (1 + bonus))
     }
 
@@ -141,6 +143,7 @@ class GameEngine {
         player.unlockedEras = ["ancient"]
         player.currentEra = .ancient
         player.tapPower = 1
+        // Relics persist across soft prestiges
 
         recalculateProduction()
         save()
@@ -154,12 +157,110 @@ class GameEngine {
         return success
     }
 
+    // MARK: - Relics
+
+    func forgeRelic(configId: RelicID) -> Bool {
+        guard let config = GameConfig.relic(for: configId) else { return false }
+        guard player.isEraUnlocked(config.era) else { return false }
+        guard player.temporalEnergy >= config.forgeCost else { return false }
+        guard player.relicMaterials >= config.materialCost else { return false }
+
+        player.temporalEnergy -= config.forgeCost
+        player.relicMaterials -= config.materialCost
+
+        let relic = Relic(from: config)
+        player.relics.append(relic)
+        player.totalRelicsForged += 1
+
+        return true
+    }
+
+    func equipRelic(relicId: UUID) -> Bool {
+        guard let index = player.relics.firstIndex(where: { $0.id == relicId }) else { return false }
+        guard !player.relics[index].isEquipped else { return false }
+        guard player.equippedRelics.count < player.maxRelicSlots else { return false }
+
+        player.relics[index].isEquipped = true
+        recalculateProduction()
+        return true
+    }
+
+    func unequipRelic(relicId: UUID) -> Bool {
+        guard let index = player.relics.firstIndex(where: { $0.id == relicId }) else { return false }
+        guard player.relics[index].isEquipped else { return false }
+
+        player.relics[index].isEquipped = false
+        recalculateProduction()
+        return true
+    }
+
+    func salvageRelic(relicId: UUID) -> Bool {
+        guard let index = player.relics.firstIndex(where: { $0.id == relicId }) else { return false }
+        let relic = player.relics[index]
+
+        // Return some materials based on rarity
+        let materialsBack: Int
+        switch relic.rarity {
+        case .common: materialsBack = 2
+        case .rare: materialsBack = 5
+        case .epic: materialsBack = 10
+        case .legendary: materialsBack = 20
+        }
+
+        player.relicMaterials += materialsBack
+        player.relics.remove(at: index)
+        recalculateProduction()
+        return true
+    }
+
+    // MARK: - Daily Rewards
+
+    func canClaimDailyReward() -> Bool {
+        player.dailyRewardState.canClaimToday
+    }
+
+    func claimDailyReward() -> DailyRewardConfig? {
+        guard canClaimDailyReward() else { return nil }
+
+        let rewardDay = player.dailyRewardState.todayRewardDay
+        let config = DailyRewardSystem.reward(for: rewardDay)
+
+        player.dailyRewardState.claim()
+
+        switch config.reward {
+        case .temporalEnergy(let amount):
+            let scaled = DailyRewardSystem.scaledTEReward(
+                baseAmount: amount,
+                playerProductionRate: totalProductionRate
+            )
+            player.temporalEnergy += scaled
+            player.totalTEEarned += scaled
+            player.totalLifetimeTEEarned += scaled
+        case .chronoShards(let amount):
+            player.chronoShards += amount
+            player.totalChronoShardsEarned += amount
+            player.skillTree.availablePoints += amount
+        case .relicMaterials(let amount):
+            player.relicMaterials += amount
+        case .productionBoost(let multiplier, let minutes):
+            player.activeBoostMultiplier = multiplier
+            player.boostExpirationDate = Date().addingTimeInterval(TimeInterval(minutes * 60))
+            recalculateProduction()
+        }
+
+        save()
+        return config
+    }
+
     // MARK: - Private
 
     private func tick() {
         let now = Date()
         let delta = now.timeIntervalSince(lastTickTime)
         lastTickTime = now
+
+        // Check boost expiration
+        checkBoostExpiration()
 
         let earned = totalProductionRate * Decimal(delta)
         if earned > 0 {
@@ -168,8 +269,27 @@ class GameEngine {
             player.totalLifetimeTEEarned += earned
         }
 
+        // Accumulate relic materials from generators
+        let activeGeneratorCount = player.generators.values.reduce(0) { $0 + $1.quantity }
+        if activeGeneratorCount > 0 {
+            materialAccumulator += Double(activeGeneratorCount) * GameConfig.relicMaterialDropRate * delta
+            if materialAccumulator >= 1.0 {
+                let dropped = Int(materialAccumulator)
+                player.relicMaterials += dropped
+                materialAccumulator -= Double(dropped)
+            }
+        }
+
         player.totalPlayTime += delta
         player.lastOnlineTimestamp = now
+    }
+
+    private func checkBoostExpiration() {
+        if let expiration = player.boostExpirationDate, Date() >= expiration {
+            player.activeBoostMultiplier = 1
+            player.boostExpirationDate = nil
+            recalculateProduction()
+        }
     }
 
     func recalculateProduction() {
@@ -182,14 +302,20 @@ class GameEngine {
 
                 let upgradeMultiplier = upgradeMultiplier(for: config.id, era: era)
                 let skillMultiplier = productionSkillMultiplier()
+                let relicMultiplier = productionRelicMultiplier(for: era)
 
                 let production = state.production(
                     upgradeMultiplier: upgradeMultiplier,
                     skillMultiplier: skillMultiplier,
-                    relicMultiplier: 1 // Relics in Phase 2
+                    relicMultiplier: relicMultiplier
                 )
                 total += production
             }
+        }
+
+        // Apply active boost
+        if player.hasActiveBoost {
+            total *= player.activeBoostMultiplier
         }
 
         totalProductionRate = total
@@ -227,6 +353,67 @@ class GameEngine {
         return multiplier
     }
 
+    // MARK: - Relic Multipliers
+
+    private func productionRelicMultiplier(for era: Era) -> Decimal {
+        var multiplier: Decimal = 1
+        for relic in player.equippedRelics {
+            switch relic.effect {
+            case .generatorBoost(let relicEra, let mult) where relicEra == era:
+                multiplier *= mult
+            case .allProductionBoost(let mult):
+                multiplier *= mult
+            case .synergyBoost(let mult):
+                multiplier *= mult
+            default:
+                break
+            }
+        }
+        return multiplier
+    }
+
+    private func tapRelicMultiplier() -> Decimal {
+        var multiplier: Decimal = 1
+        for relic in player.equippedRelics {
+            if case .tapBoost(let mult) = relic.effect {
+                multiplier *= mult
+            }
+        }
+        return multiplier
+    }
+
+    private func offlineRelicBonus() -> Decimal {
+        var bonus: Decimal = 0
+        for relic in player.equippedRelics {
+            if case .offlineBoost(let mult) = relic.effect {
+                bonus += mult - 1
+            }
+        }
+        return bonus
+    }
+
+    private func prestigeRelicBonus() -> Decimal {
+        var bonus: Decimal = 0
+        for relic in player.equippedRelics {
+            if case .prestigeBoost(let mult) = relic.effect {
+                bonus += mult - 1
+            }
+        }
+        return bonus
+    }
+
+    private func eraRelicDiscount() -> Decimal {
+        var discount: Decimal = 0
+        for relic in player.equippedRelics {
+            if case .eraUnlockDiscount(let disc) = relic.effect {
+                discount += disc
+            }
+        }
+        return max(Decimal(string: "0.1")!, 1 - discount)
+    }
+
+    // MARK: - Skill Helpers
+
     private func tapSkillMultiplier() -> Decimal {
         var multiplier: Decimal = 1
         for node in GameConfig.allSkillNodes {
@@ -237,7 +424,6 @@ class GameEngine {
             }
         }
 
-        // Also apply tap upgrades
         for upgradeId in player.purchasedUpgrades {
             guard let config = GameConfig.upgrade(for: UpgradeID(rawValue: upgradeId)) else { continue }
             if case .tapMultiplier(let mult) = config.effect {
