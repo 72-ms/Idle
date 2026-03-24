@@ -193,14 +193,34 @@ struct LiveEventView: View {
                 Spacer()
             }
 
-            // Points display
+            // Points display with cap indicator
             HStack {
                 Text("\(dayPoints)")
                     .font(.title3.weight(.bold).monospacedDigit())
                     .foregroundStyle(themeAccent(event!.theme))
-                Text("points today")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.5))
+
+                if let cap = day.challengeType.dailyPointCap {
+                    let effectiveCap = Int(Decimal(cap) * day.bonusMultiplier)
+                    let atCap = dayPoints >= effectiveCap
+                    Text("/ \(shortNumber(effectiveCap))")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(atCap ? .green.opacity(0.7) : .white.opacity(0.4))
+
+                    if atCap {
+                        Text("MAXED")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.green)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(.green.opacity(0.15))
+                            .clipShape(Capsule())
+                    }
+                } else {
+                    Text("points today")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+
                 Spacer()
             }
         }

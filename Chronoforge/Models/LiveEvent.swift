@@ -79,6 +79,24 @@ enum LiveEventChallengeType: String, Codable, CaseIterable {
         case .eraExplorer: return 2000
         }
     }
+
+    /// Maximum raw points (before bonus multiplier) earnable per day for this challenge.
+    /// Prevents macro abuse on tap-heavy challenges and AFK farming on passive ones.
+    /// nil = no cap (for actions that are naturally limited like epoch resets).
+    var dailyPointCap: Int? {
+        switch self {
+        case .tapFrenzy: return 10_000          // 10K taps worth — ~30min of active play
+        case .productionSurge: return 100_000   // Passive earnings capped
+        case .generatorRush: return 50_000      // ~5000 generators
+        case .relicForging: return 25_000       // 50 relics — very active session
+        case .prestigeMarathon: return nil      // Naturally gated by prestige cost
+        case .upgradeSpree: return 15_000       // 300 upgrades
+        case .materialHarvest: return 50_000    // 10K materials
+        case .shardCollection: return 75_000    // 3K shards
+        case .epochPush: return nil             // Naturally gated by epoch requirements
+        case .eraExplorer: return nil           // Only 5 eras total, self-limiting
+        }
+    }
 }
 
 // MARK: - Daily Challenge

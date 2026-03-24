@@ -250,6 +250,11 @@ final class LiveEventManager {
             rawPoints = max(0, player.unlockedEras.count - snapshot.unlockedEraCount) * challenge.pointsPerAction
         }
 
+        // Apply daily point cap (before bonus multiplier) to prevent macro/AFK abuse
+        if let cap = challenge.dailyPointCap {
+            rawPoints = min(rawPoints, cap)
+        }
+
         // Apply day bonus multiplier
         return Int(Decimal(rawPoints) * day.bonusMultiplier)
     }
