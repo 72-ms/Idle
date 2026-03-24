@@ -23,6 +23,10 @@ struct SettingsView: View {
                     StatRow(label: "Chrono Shards Earned", value: "\(player.totalChronoShardsEarned)")
                     StatRow(label: "Relics Forged", value: "\(player.totalRelicsForged)")
                     StatRow(label: "Relic Materials", value: "\(player.relicMaterials)")
+                    StatRow(label: "Epoch Resets", value: "\(player.totalEpochCount)")
+                    StatRow(label: "Epoch Crystals", value: "\(player.epochCrystals)")
+                    StatRow(label: "Contracts Completed", value: "\(player.completedContractCount)")
+                    StatRow(label: "Achievements", value: "\(player.achievementState.unlockedAchievements.count)/\(AchievementSystem.allAchievements.count)")
                     StatRow(label: "Daily Streak", value: "\(player.dailyRewardState.currentStreak) days")
                     StatRow(label: "Play Time", value: formatPlayTime(player.totalPlayTime))
                 }

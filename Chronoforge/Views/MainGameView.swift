@@ -134,6 +134,12 @@ struct MainGameView: View {
                 PrestigeView()
             case .skills:
                 SkillTreeView()
+            case .epoch:
+                EpochResetView()
+            case .contracts:
+                ContractView()
+            case .achievements:
+                AchievementView()
             }
         }
         .frame(maxHeight: .infinity)
@@ -158,11 +164,33 @@ struct MainGameView: View {
                 tabButton("Skills", icon: "sparkles", tab: .skills)
             }
 
-            // Settings & Stats buttons
-            Button {
-                showSettings = true
+            if player.totalEpochCount > 0 || engine.canEpochReset() {
+                tabButton("Epoch", icon: "arrow.triangle.2.circlepath", tab: .epoch)
+            }
+
+            // More menu
+            Menu {
+                if !player.activeContracts.isEmpty || player.completedContractCount > 0 {
+                    Button {
+                        selectedTab = .contracts
+                    } label: {
+                        Label("Contracts", systemImage: "doc.text")
+                    }
+                }
+
+                Button {
+                    selectedTab = .achievements
+                } label: {
+                    Label("Achievements", systemImage: "trophy")
+                }
+
+                Button {
+                    showSettings = true
+                } label: {
+                    Label("Settings", systemImage: "gear")
+                }
             } label: {
-                Image(systemName: "gear")
+                Image(systemName: "ellipsis.circle")
                     .font(.title3)
                     .frame(maxWidth: .infinity)
             }
@@ -276,4 +304,7 @@ enum GameTab: String {
     case relics
     case prestige
     case skills
+    case epoch
+    case contracts
+    case achievements
 }

@@ -9,6 +9,8 @@ class GameEngine {
     private var saveTimer: Timer?
     private var lastTickTime: Date = Date()
     private var materialAccumulator: Double = 0
+    private var autoTapAccumulator: Double = 0
+    private var tickCounter: Int = 0
 
     private(set) var totalProductionRate: Decimal = 0
     private(set) var isRunning = false
@@ -145,7 +147,11 @@ class GameEngine {
         player.tapPower = 1
         // Relics persist across soft prestiges
 
+        // Apply epoch perks after reset
+        applyEpochPerksOnPrestige()
+
         recalculateProduction()
+        checkAchievements()
         save()
     }
 
@@ -252,6 +258,165 @@ class GameEngine {
         return config
     }
 
+    // MARK: - Epoch Reset
+
+    func canEpochReset() -> Bool {
+        player.totalPrestigeCount >= EpochConfig.minimumPrestigesForEpoch &&
+        EpochConfig.epochCrystalsForReset(totalLifetimeCS: player.totalChronoShardsEarned) > 0
+    }
+
+    func epochResetReward() -> Int {
+        EpochConfig.epochCrystalsForReset(totalLifetimeCS: player.totalChronoShardsEarned)
+    }
+
+    func performEpochReset() {
+        let crystals = epochResetReward()
+        guard crystals > 0 else { return }
+
+        player.epochCrystals += crystals
+        player.totalEpochCount += 1
+
+        // Hard reset everything except epoch stuff
+        player.temporalEnergy = 0
+        player.totalTEEarned = 0
+        player.chronoShards = 0
+        player.totalChronoShardsEarned = 0
+        player.generators = [:]
+        player.purchasedUpgrades = []
+        player.skillTree = SkillTreeState()
+        player.unlockedEras = ["ancient"]
+        player.currentEra = .ancient
+        player.tapPower = 1
+        player.relics = []
+        player.relicMaterials = 0
+        player.totalPrestigeCount = 0
+        // Keep: epochCrystals, epochPerkState, achievements, cosmetics, dailyRewardState, lifetime stats
+
+        applyEpochPerksOnPrestige()
+        recalculateProduction()
+        checkAchievements()
+        save()
+    }
+
+    func buyEpochPerk(perkId: EpochPerkID) -> Bool {
+        let config = EpochConfig.perk(for: perkId)
+        guard player.epochCrystals >= config.cost else { return false }
+        guard player.epochPerkState.purchase(perkId: perkId) else { return false }
+
+        player.epochCrystals -= config.cost
+        recalculateProduction()
+        save()
+        return true
+    }
+
+    private func applyEpochPerksOnPrestige() {
+        for perk in EpochConfig.allPerks {
+            let level = player.epochPerkState.level(for: perk.id)
+            guard level > 0 else { continue }
+
+            switch perk.effect {
+            case .startingTE(let amount):
+                player.temporalEnergy += amount * Decimal(level)
+            case .startingGenerators(let era, let index, let qty):
+                let id = GeneratorID(era: era, index: index)
+                var state = player.generatorState(for: id)
+                state.quantity += qty * level
+                player.generators[id.id] = state
+            case .startingMaterials(let amount):
+                player.relicMaterials += amount * level
+            default:
+                break // Other perks are passive multipliers applied during calculation
+            }
+        }
+    }
+
+    // MARK: - Contracts
+
+    func generateNewContracts() {
+        // Remove expired/claimed contracts
+        player.activeContracts.removeAll { $0.isExpired || $0.isClaimed }
+
+        // Generate new ones if empty
+        guard player.activeContracts.isEmpty else { return }
+
+        let available = ContractSystem.weeklyContracts.shuffled().prefix(2)
+        for config in available {
+            let contract = ContractSystem.generateContract(from: config)
+            player.activeContracts.append(contract)
+        }
+        save()
+    }
+
+    func updateContractProgress() {
+        for i in 0..<player.activeContracts.count {
+            guard !player.activeContracts[i].isCompleted else { continue }
+            guard !player.activeContracts[i].isExpired else { continue }
+
+            switch player.activeContracts[i].goal {
+            case .collectTE:
+                player.activeContracts[i].currentProgress = player.totalTEEarned
+            case .performPrestiges:
+                player.activeContracts[i].currentProgress = Decimal(player.totalPrestigeCount)
+            case .forgeRelics:
+                player.activeContracts[i].currentProgress = Decimal(player.totalRelicsForged)
+            case .reachEra(let era):
+                player.activeContracts[i].currentProgress = player.isEraUnlocked(era) ? 1 : 0
+            case .tapCount:
+                player.activeContracts[i].currentProgress = Decimal(player.totalTaps)
+            }
+
+            if player.activeContracts[i].currentProgress >= player.activeContracts[i].targetProgress {
+                player.activeContracts[i].isCompleted = true
+            }
+        }
+    }
+
+    func claimContractReward(contractId: UUID) {
+        guard let index = player.activeContracts.firstIndex(where: { $0.id == contractId }) else { return }
+        guard player.activeContracts[index].isCompleted else { return }
+        guard !player.activeContracts[index].isClaimed else { return }
+
+        let reward = player.activeContracts[index].reward
+        switch reward {
+        case .chronoShards(let amount):
+            player.chronoShards += amount
+            player.totalChronoShardsEarned += amount
+            player.skillTree.availablePoints += amount
+        case .epochCrystals(let amount):
+            player.epochCrystals += amount
+        case .relicMaterials(let amount):
+            player.relicMaterials += amount
+        case .exclusiveRelic:
+            break // Future: grant exclusive relic
+        }
+
+        player.activeContracts[index].isClaimed = true
+        player.completedContractCount += 1
+        save()
+    }
+
+    // MARK: - Achievements
+
+    func checkAchievements() {
+        let newlyUnlocked = AchievementSystem.checkAchievements(
+            player: player,
+            achievements: &player.achievementState
+        )
+
+        for achievement in newlyUnlocked {
+            switch achievement.reward {
+            case .chronoShards(let amount) where amount > 0:
+                player.chronoShards += amount
+                player.totalChronoShardsEarned += amount
+                player.skillTree.availablePoints += amount
+            case .relicMaterials(let amount):
+                player.relicMaterials += amount
+            default:
+                break
+            }
+        }
+    }
+
     // MARK: - Private
 
     private func tick() {
@@ -278,6 +443,23 @@ class GameEngine {
                 player.relicMaterials += dropped
                 materialAccumulator -= Double(dropped)
             }
+        }
+
+        // Auto-tap from epoch perk
+        let autoTapLevel = player.epochPerkState.level(for: EpochPerkID(rawValue: "auto_tap"))
+        if autoTapLevel > 0 {
+            autoTapAccumulator += Double(autoTapLevel) * delta
+            while autoTapAccumulator >= 1.0 {
+                tap()
+                autoTapAccumulator -= 1.0
+            }
+        }
+
+        // Periodically check contracts and achievements (every ~5 seconds)
+        tickCounter += 1
+        if tickCounter % 50 == 0 {
+            updateContractProgress()
+            checkAchievements()
         }
 
         player.totalPlayTime += delta
@@ -317,6 +499,16 @@ class GameEngine {
         if player.hasActiveBoost {
             total *= player.activeBoostMultiplier
         }
+
+        // Apply epoch perk permanent production multiplier
+        let epochLevel = player.epochPerkState.level(for: EpochPerkID(rawValue: "eternal_forge"))
+        if epochLevel > 0 {
+            total *= (1 + Decimal(string: "0.25")! * Decimal(epochLevel))
+        }
+
+        // Apply epoch prestige multiplier to production too
+        let shardAmpLevel = player.epochPerkState.level(for: EpochPerkID(rawValue: "shard_amplifier"))
+        // Note: shard_amplifier only affects prestige rewards, not production
 
         totalProductionRate = total
     }

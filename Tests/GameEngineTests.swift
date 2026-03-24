@@ -274,4 +274,112 @@ final class GameEngineTests: XCTestCase {
                 "\(nextEra.displayName) first generator should produce more than \(currentEra.displayName) last generator")
         }
     }
+
+    // MARK: - Epoch Reset Tests
+
+    func testEpochCrystalsFormula() {
+        XCTAssertEqual(EpochConfig.epochCrystalsForReset(totalLifetimeCS: 0), 0)
+        XCTAssertEqual(EpochConfig.epochCrystalsForReset(totalLifetimeCS: 500_000), 0)
+        XCTAssertGreaterThan(EpochConfig.epochCrystalsForReset(totalLifetimeCS: 2_000_000), 0)
+    }
+
+    func testEpochPerksExist() {
+        XCTAssertFalse(EpochConfig.allPerks.isEmpty)
+        XCTAssertEqual(EpochConfig.allPerks.count, 8)
+    }
+
+    func testEpochPerkPurchase() {
+        var state = EpochPerkState()
+        let perkId = EpochPerkID(rawValue: "head_start")
+        XCTAssertTrue(state.purchase(perkId: perkId))
+        XCTAssertEqual(state.level(for: perkId), 1)
+    }
+
+    func testEpochPerkMaxLevel() {
+        var state = EpochPerkState()
+        let perkId = EpochPerkID(rawValue: "head_start")
+        let config = EpochConfig.perk(for: perkId)
+        for _ in 0..<config.maxLevel {
+            _ = state.purchase(perkId: perkId)
+        }
+        XCTAssertFalse(state.purchase(perkId: perkId))
+        XCTAssertEqual(state.level(for: perkId), config.maxLevel)
+    }
+
+    // MARK: - Contract Tests
+
+    func testContractGeneration() {
+        let config = ContractSystem.weeklyContracts.first!
+        let contract = ContractSystem.generateContract(from: config)
+        XCTAssertFalse(contract.isCompleted)
+        XCTAssertFalse(contract.isClaimed)
+        XCTAssertFalse(contract.isExpired)
+        XCTAssertGreaterThan(contract.timeRemaining, 0)
+    }
+
+    func testContractProgress() {
+        let config = ContractSystem.weeklyContracts.first!
+        var contract = ContractSystem.generateContract(from: config)
+        XCTAssertEqual(contract.progressFraction, 0)
+
+        contract.currentProgress = contract.targetProgress / 2
+        XCTAssertEqual(contract.progressFraction, 0.5, accuracy: 0.01)
+
+        contract.currentProgress = contract.targetProgress
+        XCTAssertEqual(contract.progressFraction, 1.0, accuracy: 0.01)
+    }
+
+    // MARK: - Achievement Tests
+
+    func testAchievementInitialState() {
+        let state = AchievementState()
+        XCTAssertTrue(state.unlockedAchievements.isEmpty)
+        XCTAssertFalse(state.isUnlocked(AchievementID(rawValue: "first_tap")))
+    }
+
+    func testAchievementUnlock() {
+        var state = AchievementState()
+        let id = AchievementID(rawValue: "first_tap")
+        state.unlock(id)
+        XCTAssertTrue(state.isUnlocked(id))
+    }
+
+    func testAchievementCheck() {
+        let player = PlayerState()
+        player.totalTaps = 1
+        var achievements = AchievementState()
+
+        let unlocked = AchievementSystem.checkAchievements(player: player, achievements: &achievements)
+        XCTAssertTrue(unlocked.contains { $0.id.rawValue == "first_tap" })
+        XCTAssertTrue(achievements.isUnlocked(AchievementID(rawValue: "first_tap")))
+    }
+
+    func testAchievementsExist() {
+        XCTAssertGreaterThanOrEqual(AchievementSystem.allAchievements.count, 15)
+    }
+
+    // MARK: - Full Serialization Test
+
+    func testFullPlayerStateSerialization() throws {
+        let player = PlayerState()
+        player.temporalEnergy = 99999
+        player.chronoShards = 50
+        player.epochCrystals = 3
+        player.relicMaterials = 100
+        player.totalRelicsForged = 5
+        player.totalPrestigeCount = 12
+        player.totalEpochCount = 1
+        player.completedContractCount = 2
+        player.achievementState.unlock(AchievementID(rawValue: "first_tap"))
+        _ = player.epochPerkState.purchase(perkId: EpochPerkID(rawValue: "head_start"))
+
+        let data = try JSONEncoder().encode(player)
+        let loaded = try JSONDecoder().decode(PlayerState.self, from: data)
+
+        XCTAssertEqual(loaded.temporalEnergy, 99999)
+        XCTAssertEqual(loaded.epochCrystals, 3)
+        XCTAssertEqual(loaded.completedContractCount, 2)
+        XCTAssertTrue(loaded.achievementState.isUnlocked(AchievementID(rawValue: "first_tap")))
+        XCTAssertEqual(loaded.epochPerkState.level(for: EpochPerkID(rawValue: "head_start")), 1)
+    }
 }

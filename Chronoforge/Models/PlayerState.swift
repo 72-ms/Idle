@@ -41,6 +41,16 @@ class PlayerState: Codable {
     var activeBoostMultiplier: Decimal = 1
     var boostExpirationDate: Date?
 
+    // Epoch Perks
+    var epochPerkState: EpochPerkState = EpochPerkState()
+
+    // Contracts
+    var activeContracts: [ActiveContract] = []
+    var completedContractCount: Int = 0
+
+    // Achievements
+    var achievementState: AchievementState = AchievementState()
+
     // MARK: - Codable
 
     enum CodingKeys: String, CodingKey {
@@ -55,6 +65,9 @@ class PlayerState: Codable {
         case relics, relicMaterials, totalRelicsForged
         case dailyRewardState
         case activeBoostMultiplier, boostExpirationDate
+        case epochPerkState
+        case activeContracts, completedContractCount
+        case achievementState
     }
 
     init() {}
@@ -86,6 +99,10 @@ class PlayerState: Codable {
         dailyRewardState = try container.decodeIfPresent(DailyRewardState.self, forKey: .dailyRewardState) ?? DailyRewardState()
         activeBoostMultiplier = try container.decodeIfPresent(Decimal.self, forKey: .activeBoostMultiplier) ?? 1
         boostExpirationDate = try container.decodeIfPresent(Date.self, forKey: .boostExpirationDate)
+        epochPerkState = try container.decodeIfPresent(EpochPerkState.self, forKey: .epochPerkState) ?? EpochPerkState()
+        activeContracts = try container.decodeIfPresent([ActiveContract].self, forKey: .activeContracts) ?? []
+        completedContractCount = try container.decodeIfPresent(Int.self, forKey: .completedContractCount) ?? 0
+        achievementState = try container.decodeIfPresent(AchievementState.self, forKey: .achievementState) ?? AchievementState()
     }
 
     func encode(to encoder: Encoder) throws {
@@ -115,6 +132,10 @@ class PlayerState: Codable {
         try container.encode(dailyRewardState, forKey: .dailyRewardState)
         try container.encode(activeBoostMultiplier, forKey: .activeBoostMultiplier)
         try container.encode(boostExpirationDate, forKey: .boostExpirationDate)
+        try container.encode(epochPerkState, forKey: .epochPerkState)
+        try container.encode(activeContracts, forKey: .activeContracts)
+        try container.encode(completedContractCount, forKey: .completedContractCount)
+        try container.encode(achievementState, forKey: .achievementState)
     }
 
     // MARK: - Helpers
