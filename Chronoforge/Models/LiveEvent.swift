@@ -331,6 +331,122 @@ struct LiveEventTotalMilestone: Codable, Identifiable {
     }
 }
 
+// MARK: - Event Placement Tiers
+
+/// Competitive placement tiers — rewards scale with rank.
+/// Percentile-based so every player has a shot regardless of server population.
+enum EventPlacementTier: Int, Codable, CaseIterable, Comparable {
+    case top1      = 1    // Top 1%
+    case top5      = 5    // Top 5%
+    case top10     = 10   // Top 10%
+    case top25     = 25   // Top 25%
+    case top50     = 50   // Top 50%
+    case top100    = 100  // Everyone who participated
+
+    static func < (lhs: EventPlacementTier, rhs: EventPlacementTier) -> Bool {
+        lhs.rawValue < rhs.rawValue  // Lower rawValue = higher tier
+    }
+
+    static func tier(forPercentile percentile: Double) -> EventPlacementTier {
+        switch percentile {
+        case ...1:  return .top1
+        case ...5:  return .top5
+        case ...10: return .top10
+        case ...25: return .top25
+        case ...50: return .top50
+        default:    return .top100
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .top1:   return "Top 1%"
+        case .top5:   return "Top 5%"
+        case .top10:  return "Top 10%"
+        case .top25:  return "Top 25%"
+        case .top50:  return "Top 50%"
+        case .top100: return "Participant"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .top1:   return "trophy.fill"
+        case .top5:   return "medal.fill"
+        case .top10:  return "rosette"
+        case .top25:  return "star.fill"
+        case .top50:  return "star.leadinghalf.filled"
+        case .top100: return "checkmark.seal"
+        }
+    }
+
+    var accentColor: String {
+        switch self {
+        case .top1:   return "gold"
+        case .top5:   return "silver"
+        case .top10:  return "bronze"
+        case .top25:  return "blue"
+        case .top50:  return "green"
+        case .top100: return "gray"
+        }
+    }
+
+    /// Placement rewards scale per tier. scaleFactor increases for later events.
+    func rewards(scaleFactor: Int) -> [LiveEventReward] {
+        let s = scaleFactor
+        switch self {
+        case .top1:
+            return [
+                .chronoShards(500 * s),
+                .epochCrystals(50 * s),
+                .eventToken(100 * s),
+                .cosmetic("event_rank_champion_frame"),
+                .cosmetic("event_rank_champion_title")
+            ]
+        case .top5:
+            return [
+                .chronoShards(250 * s),
+                .epochCrystals(25 * s),
+                .eventToken(50 * s),
+                .cosmetic("event_rank_elite_frame")
+            ]
+        case .top10:
+            return [
+                .chronoShards(150 * s),
+                .epochCrystals(15 * s),
+                .eventToken(30 * s)
+            ]
+        case .top25:
+            return [
+                .chronoShards(75 * s),
+                .epochCrystals(8 * s),
+                .eventToken(15 * s)
+            ]
+        case .top50:
+            return [
+                .chronoShards(30 * s),
+                .eventToken(5 * s)
+            ]
+        case .top100:
+            return [
+                .chronoShards(10 * s)
+            ]
+        }
+    }
+}
+
+// MARK: - Event Leaderboard Entry
+
+struct EventLeaderboardEntry: Identifiable {
+    let id: String
+    let rank: Int
+    let playerName: String
+    let score: Int
+    let isLocalPlayer: Bool
+    let vipTier: VIPTier
+    let placementTier: EventPlacementTier
+}
+
 // MARK: - Live Event Config
 
 /// A fully configured multi-day event.
@@ -348,6 +464,17 @@ struct LiveEventConfig: Codable, Identifiable {
     var duration: Int { days.count }
     var isActive: Bool { Date() >= startDate && Date() <= endDate }
     var hasEnded: Bool { Date() > endDate }
+
+    /// Game Center leaderboard ID for this event.
+    var leaderboardID: String { "com.chronoforge.event.\(id)" }
+
+    /// The scale factor for placement rewards (later events = bigger rewards).
+    var scaleFactor: Int {
+        // Extract the index from the event ID (e.g. "chronoSurge_3" -> 3)
+        let parts = id.split(separator: "_")
+        let index = Int(parts.last ?? "0") ?? 0
+        return max(1, index / 3 + 1)
+    }
 
     /// Which day index is currently active (0-based), or nil if event hasn't started/ended.
     var currentDayIndex: Int? {
@@ -432,6 +559,16 @@ struct LiveEventPlayerState: Codable {
     /// Snapshot of tracked stats at the start of each day, for delta calculation.
     var dayStartSnapshots: [Int: DayStartSnapshot] = [:]
 
+    // MARK: - Leaderboard / Placement
+    var finalRank: Int?                     // Set when event ends
+    var finalPercentile: Double?            // Set when event ends
+    var claimedPlacementReward: Bool = false // True after player claims their tier reward
+
+    var placementTier: EventPlacementTier? {
+        guard let pct = finalPercentile else { return nil }
+        return EventPlacementTier.tier(forPercentile: pct)
+    }
+
     mutating func reset(for eventId: String) {
         activeEventId = eventId
         totalPoints = 0
@@ -441,6 +578,9 @@ struct LiveEventPlayerState: Codable {
         claimedPacks = []
         eventTokens = 0
         dayStartSnapshots = [:]
+        finalRank = nil
+        finalPercentile = nil
+        claimedPlacementReward = false
     }
 
     func pointsForDay(_ day: Int) -> Int {

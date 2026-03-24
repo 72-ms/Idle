@@ -94,6 +94,9 @@ class AppState {
             }
         }
 
+        // Give LiveEventManager access to LeaderboardManager for score submission
+        liveEventManager.leaderboardManager = leaderboardManager
+
         // Sync seasonal event bonus and deliver VIP daily rewards on launch
         syncSeasonalBonus()
         deliverVIPDailyRewards()
@@ -124,6 +127,7 @@ class AppState {
         engine.recalculateProduction()
         engine.start()
         announcementManager.start()
+        liveEventManager.checkEventTransition(player: engine.player)
         liveEventManager.start()
     }
 
