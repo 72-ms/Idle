@@ -10,6 +10,7 @@ class AppState {
     var offlineDuration: TimeInterval = 0
     let storeManager: StoreManager
     let leaderboardManager: LeaderboardManager
+    let guildManager: GuildManager
 
     init() {
         let saveManager = SaveManager()
@@ -25,11 +26,28 @@ class AppState {
         self.engine = GameEngine(player: player, saveManager: saveManager)
         self.storeManager = StoreManager()
         self.leaderboardManager = LeaderboardManager()
+        self.guildManager = GuildManager()
 
         // Wire up consumable purchase delivery
         let engineRef = self.engine
         storeManager.onConsumablePurchased = { reward in
             engineRef.applyStoreReward(reward)
+        }
+
+        // Wire up guild reward delivery
+        guildManager.onReward = { [weak engineRef] reward in
+            guard let engine = engineRef else { return }
+            switch reward {
+            case .dailyShards(let amount):
+                engine.player.chronoShards += amount
+                engine.player.totalChronoShardsEarned += amount
+            case .raidComplete(let shards, let crystals, let relicMaterials):
+                engine.player.chronoShards += shards
+                engine.player.totalChronoShardsEarned += shards
+                engine.player.epochCrystals += crystals
+                engine.player.relicMaterials += relicMaterials
+            }
+            engine.save()
         }
 
         engine.start()

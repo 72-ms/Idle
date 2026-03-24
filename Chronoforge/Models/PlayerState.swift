@@ -61,6 +61,23 @@ class PlayerState: Codable {
     var ownedCosmetics: Set<String> = []
     var equippedCosmetics: Set<String> = []
 
+    // Profile
+    var profileId: UUID = UUID()
+    var displayName: String = "Chrono Traveler"
+    var equippedTitle: String?
+    var equippedProfileBorder: String?
+    var equippedProfileBackground: String?
+    var equippedNameColor: String?
+    var equippedChatFlair: String?
+    var equippedAvatarFrame: String?
+    var pinnedAchievements: [String] = []
+
+    // Guild
+    var guildId: UUID?
+    var guildName: String?
+    var guildRole: GuildRole?
+    var totalGuildDonations: Int = 0
+
     // MARK: - Codable
 
     enum CodingKeys: String, CodingKey {
@@ -81,6 +98,11 @@ class PlayerState: Codable {
         case challengeState
         case seasonalEventState
         case ownedCosmetics, equippedCosmetics
+        case profileId, displayName
+        case equippedTitle, equippedProfileBorder, equippedProfileBackground
+        case equippedNameColor, equippedChatFlair, equippedAvatarFrame
+        case pinnedAchievements
+        case guildId, guildName, guildRole, totalGuildDonations
     }
 
     init() {}
@@ -120,6 +142,19 @@ class PlayerState: Codable {
         seasonalEventState = try container.decodeIfPresent(SeasonalEventState.self, forKey: .seasonalEventState) ?? SeasonalEventState()
         ownedCosmetics = try container.decodeIfPresent(Set<String>.self, forKey: .ownedCosmetics) ?? []
         equippedCosmetics = try container.decodeIfPresent(Set<String>.self, forKey: .equippedCosmetics) ?? []
+        profileId = try container.decodeIfPresent(UUID.self, forKey: .profileId) ?? UUID()
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? "Chrono Traveler"
+        equippedTitle = try container.decodeIfPresent(String.self, forKey: .equippedTitle)
+        equippedProfileBorder = try container.decodeIfPresent(String.self, forKey: .equippedProfileBorder)
+        equippedProfileBackground = try container.decodeIfPresent(String.self, forKey: .equippedProfileBackground)
+        equippedNameColor = try container.decodeIfPresent(String.self, forKey: .equippedNameColor)
+        equippedChatFlair = try container.decodeIfPresent(String.self, forKey: .equippedChatFlair)
+        equippedAvatarFrame = try container.decodeIfPresent(String.self, forKey: .equippedAvatarFrame)
+        pinnedAchievements = try container.decodeIfPresent([String].self, forKey: .pinnedAchievements) ?? []
+        guildId = try container.decodeIfPresent(UUID.self, forKey: .guildId)
+        guildName = try container.decodeIfPresent(String.self, forKey: .guildName)
+        guildRole = try container.decodeIfPresent(GuildRole.self, forKey: .guildRole)
+        totalGuildDonations = try container.decodeIfPresent(Int.self, forKey: .totalGuildDonations) ?? 0
     }
 
     func encode(to encoder: Encoder) throws {
@@ -157,6 +192,19 @@ class PlayerState: Codable {
         try container.encode(seasonalEventState, forKey: .seasonalEventState)
         try container.encode(ownedCosmetics, forKey: .ownedCosmetics)
         try container.encode(equippedCosmetics, forKey: .equippedCosmetics)
+        try container.encode(profileId, forKey: .profileId)
+        try container.encode(displayName, forKey: .displayName)
+        try container.encodeIfPresent(equippedTitle, forKey: .equippedTitle)
+        try container.encodeIfPresent(equippedProfileBorder, forKey: .equippedProfileBorder)
+        try container.encodeIfPresent(equippedProfileBackground, forKey: .equippedProfileBackground)
+        try container.encodeIfPresent(equippedNameColor, forKey: .equippedNameColor)
+        try container.encodeIfPresent(equippedChatFlair, forKey: .equippedChatFlair)
+        try container.encodeIfPresent(equippedAvatarFrame, forKey: .equippedAvatarFrame)
+        try container.encode(pinnedAchievements, forKey: .pinnedAchievements)
+        try container.encodeIfPresent(guildId, forKey: .guildId)
+        try container.encodeIfPresent(guildName, forKey: .guildName)
+        try container.encodeIfPresent(guildRole, forKey: .guildRole)
+        try container.encode(totalGuildDonations, forKey: .totalGuildDonations)
     }
 
     // MARK: - Helpers

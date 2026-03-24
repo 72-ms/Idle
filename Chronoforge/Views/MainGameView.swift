@@ -6,6 +6,9 @@ struct MainGameView: View {
     @Environment(GameEngine.self) private var engine
     @Environment(PlayerState.self) private var player
     @State private var selectedTab: GameTab = .generators
+    @Environment(GuildManager.self) private var guildManager
+    @Environment(StoreManager.self) private var store
+
     @State private var showPrestige = false
     @State private var showSettings = false
     @State private var showStats = false
@@ -13,6 +16,7 @@ struct MainGameView: View {
     @State private var showDailyReward = false
     @State private var showShop = false
     @State private var showLeaderboard = false
+    @State private var showProfile = false
 
     var body: some View {
         ZStack {
@@ -155,6 +159,13 @@ struct MainGameView: View {
                 ChallengeView()
             case .leaderboard:
                 LeaderboardView()
+            case .guild:
+                GuildHubView()
+            case .profile:
+                ProfileView(
+                    profile: PlayerProfile.fromLocal(player: player, vipTier: store.vipProgress.currentTier),
+                    isLocalPlayer: true
+                )
             }
         }
         .frame(maxHeight: .infinity)
@@ -205,6 +216,18 @@ struct MainGameView: View {
                     } label: {
                         Label("Challenges", systemImage: "flame")
                     }
+                }
+
+                Button {
+                    selectedTab = .guild
+                } label: {
+                    Label(guildManager.currentGuild != nil ? "Guild" : "Find Guild", systemImage: "shield.fill")
+                }
+
+                Button {
+                    selectedTab = .profile
+                } label: {
+                    Label("Profile", systemImage: "person.crop.circle")
                 }
 
                 Button {
@@ -339,4 +362,6 @@ enum GameTab: String {
     case shop
     case challenges
     case leaderboard
+    case guild
+    case profile
 }
