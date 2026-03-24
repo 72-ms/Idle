@@ -44,6 +44,8 @@ struct MainGameView: View {
             }
             NotificationManager.shared.requestPermission()
             NotificationManager.shared.rescheduleNotifications()
+            AudioManager.shared.playMusic(for: player.currentEra)
+            gameScene.era = player.currentEra
         }
     }
 
@@ -99,7 +101,7 @@ struct MainGameView: View {
 
     private var gameArea: some View {
         ZStack {
-            SpriteView(scene: makeScene(), options: [.allowsTransparency])
+            SpriteView(scene: gameScene, options: [.allowsTransparency])
                 .frame(height: 200)
 
             // Tap target
@@ -108,16 +110,21 @@ struct MainGameView: View {
                 .onTapGesture {
                     engine.tap()
                     HapticsManager.lightTap()
+                    AudioManager.shared.play(.tap)
                 }
+        }
+        .onChange(of: player.currentEra) { _, newEra in
+            gameScene.era = newEra
+            AudioManager.shared.playMusic(for: newEra)
         }
     }
 
-    private func makeScene() -> SKScene {
+    @State private var gameScene: GameScene = {
         let scene = GameScene(size: CGSize(width: 400, height: 200))
         scene.scaleMode = .resizeFill
         scene.backgroundColor = .clear
         return scene
-    }
+    }()
 
     // MARK: - Tab Content
 

@@ -63,6 +63,7 @@ struct DailyRewardView: View {
                         claimed = true
                     }
                     HapticsManager.heavyTap()
+                    AudioManager.shared.play(.reward)
                 } label: {
                     Text("Claim Reward")
                         .font(.headline)

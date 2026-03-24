@@ -50,6 +50,7 @@ struct UpgradeRow: View {
         Button {
             if engine.buyUpgrade(id: config.id) {
                 HapticsManager.mediumTap()
+                AudioManager.shared.play(.upgrade)
             }
         } label: {
             HStack {

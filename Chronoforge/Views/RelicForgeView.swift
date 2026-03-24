@@ -132,6 +132,7 @@ struct ForgeRelicRow: View {
         Button {
             if engine.forgeRelic(configId: config.id) {
                 HapticsManager.heavyTap()
+                AudioManager.shared.play(.forge)
             }
         } label: {
             HStack {

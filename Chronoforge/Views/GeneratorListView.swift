@@ -80,6 +80,7 @@ struct GeneratorListView: View {
             Button {
                 if engine.unlockEra(nextEra) {
                     HapticsManager.heavyTap()
+                    AudioManager.shared.play(.milestone)
                 }
             } label: {
                 VStack(spacing: 4) {
@@ -150,9 +151,17 @@ struct GeneratorRow: View {
         Button {
             if engine.buyGenerator(id: config.id, count: count) {
                 HapticsManager.mediumTap()
+                AudioManager.shared.play(.purchase)
             }
         } label: {
-            HStack {
+            HStack(spacing: 10) {
+                // Generator icon
+                let icon = GeneratorIcon.icon(for: config.id)
+                Image(systemName: icon.symbolName)
+                    .font(.title2)
+                    .foregroundStyle(icon.color)
+                    .frame(width: 36, height: 36)
+
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
                         Text(config.name)

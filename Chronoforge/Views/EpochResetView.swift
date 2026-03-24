@@ -127,6 +127,7 @@ struct EpochResetView: View {
             Button("Reset", role: .destructive) {
                 engine.performEpochReset()
                 HapticsManager.heavyTap()
+                AudioManager.shared.play(.epoch)
             }
         } message: {
             Text("This will reset EVERYTHING except Epoch Crystals and Perks. You will earn \(engine.epochResetReward()) Epoch Crystals.")

@@ -105,6 +105,7 @@ struct PrestigeView: View {
             Button("Collapse", role: .destructive) {
                 engine.performPrestige()
                 HapticsManager.heavyTap()
+                AudioManager.shared.play(.prestige)
             }
         } message: {
             Text("You will earn \(engine.prestigeReward()) Chrono Shards. Your generators, upgrades, and TE will be reset.")

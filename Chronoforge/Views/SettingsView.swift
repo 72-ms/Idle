@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(PlayerState.self) private var player
     @State private var showResetConfirmation = false
     @AppStorage("soundEnabled") private var soundEnabled = true
+    @AppStorage("musicEnabled") private var musicEnabled = true
     @AppStorage("hapticsEnabled") private var hapticsEnabled = true
 
     var body: some View {
@@ -13,6 +14,14 @@ struct SettingsView: View {
             List {
                 Section("Audio & Feedback") {
                     Toggle("Sound Effects", isOn: $soundEnabled)
+                    Toggle("Music", isOn: $musicEnabled)
+                        .onChange(of: musicEnabled) { _, enabled in
+                            if enabled {
+                                AudioManager.shared.playMusic(for: player.currentEra)
+                            } else {
+                                AudioManager.shared.stopMusic()
+                            }
+                        }
                     Toggle("Haptics", isOn: $hapticsEnabled)
                 }
 
