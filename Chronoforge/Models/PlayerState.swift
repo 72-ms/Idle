@@ -60,6 +60,9 @@ class PlayerState: Codable {
     // Live Events
     var liveEventState: LiveEventPlayerState = LiveEventPlayerState()
 
+    // Guild Events
+    var guildEventState: GuildEventPlayerState = GuildEventPlayerState()
+
     // Cosmetics
     var ownedCosmetics: Set<String> = []
     var equippedCosmetics: Set<String> = []
@@ -101,6 +104,7 @@ class PlayerState: Codable {
         case challengeState
         case seasonalEventState
         case liveEventState
+        case guildEventState
         case ownedCosmetics, equippedCosmetics
         case profileId, displayName
         case equippedTitle, equippedProfileBorder, equippedProfileBackground
@@ -145,6 +149,7 @@ class PlayerState: Codable {
         challengeState = try container.decodeIfPresent(ChallengeState.self, forKey: .challengeState) ?? ChallengeState()
         seasonalEventState = try container.decodeIfPresent(SeasonalEventState.self, forKey: .seasonalEventState) ?? SeasonalEventState()
         liveEventState = try container.decodeIfPresent(LiveEventPlayerState.self, forKey: .liveEventState) ?? LiveEventPlayerState()
+        guildEventState = try container.decodeIfPresent(GuildEventPlayerState.self, forKey: .guildEventState) ?? GuildEventPlayerState()
         ownedCosmetics = try container.decodeIfPresent(Set<String>.self, forKey: .ownedCosmetics) ?? []
         equippedCosmetics = try container.decodeIfPresent(Set<String>.self, forKey: .equippedCosmetics) ?? []
         profileId = try container.decodeIfPresent(UUID.self, forKey: .profileId) ?? UUID()
@@ -196,6 +201,7 @@ class PlayerState: Codable {
         try container.encode(challengeState, forKey: .challengeState)
         try container.encode(seasonalEventState, forKey: .seasonalEventState)
         try container.encode(liveEventState, forKey: .liveEventState)
+        try container.encode(guildEventState, forKey: .guildEventState)
         try container.encode(ownedCosmetics, forKey: .ownedCosmetics)
         try container.encode(equippedCosmetics, forKey: .equippedCosmetics)
         try container.encode(profileId, forKey: .profileId)

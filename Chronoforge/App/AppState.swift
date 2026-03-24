@@ -14,6 +14,7 @@ class AppState {
     let profileManager: ProfileManager
     let announcementManager: AnnouncementManager
     let liveEventManager: LiveEventManager
+    let guildEventManager: GuildEventManager
 
     init() {
         let saveManager = SaveManager()
@@ -33,6 +34,7 @@ class AppState {
         self.profileManager = ProfileManager()
         self.announcementManager = AnnouncementManager()
         self.liveEventManager = LiveEventManager()
+        self.guildEventManager = GuildEventManager()
 
         // Wire up consumable purchase delivery
         let engineRef = self.engine
@@ -97,10 +99,34 @@ class AppState {
         // Give LiveEventManager access to LeaderboardManager for score submission
         liveEventManager.leaderboardManager = leaderboardManager
 
+        // Wire GuildEventManager dependencies
+        guildEventManager.leaderboardManager = leaderboardManager
+        guildEventManager.guildManager = guildManager
+
+        // Wire guild event progress into engine tick (alongside solo events)
+        let guildEventRef = self.guildEventManager
+        let existingLiveEventTick = engine.onLiveEventTick
+        engine.onLiveEventTick = { [weak engineRef] in
+            guard let engine = engineRef else { return }
+            existingLiveEventTick?()
+            guildEventRef.updateProgress(player: engine.player)
+        }
+
+        // Wire guild event boost rewards
+        guildEventManager.onReward = { [weak engineRef] reward in
+            guard let engine = engineRef else { return }
+            if case .productionBoost(let mult, let mins) = reward {
+                engine.player.activeBoostMultiplier = mult
+                engine.player.boostExpirationDate = Date().addingTimeInterval(TimeInterval(mins * 60))
+                engine.recalculateProduction()
+            }
+        }
+
         // Sync seasonal event bonus and deliver VIP daily rewards on launch
         syncSeasonalBonus()
         deliverVIPDailyRewards()
         liveEventManager.start()
+        guildEventManager.start()
 
         engine.start()
         Task {
@@ -129,12 +155,15 @@ class AppState {
         announcementManager.start()
         liveEventManager.checkEventTransition(player: engine.player)
         liveEventManager.start()
+        guildEventManager.checkEventTransition(player: engine.player)
+        guildEventManager.start()
     }
 
     func handleAppWillResignActive() {
         engine.stop()
         announcementManager.stop()
         liveEventManager.stop()
+        guildEventManager.stop()
         AnalyticsManager.shared.track(.sessionEnd)
         AnalyticsManager.shared.flush()
         NotificationManager.shared.rescheduleNotifications()

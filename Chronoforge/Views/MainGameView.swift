@@ -167,6 +167,8 @@ struct MainGameView: View {
                 LeaderboardView()
             case .guild:
                 GuildHubView()
+            case .guildEvent:
+                GuildEventView()
             case .seasonalEvent:
                 SeasonalEventView()
             case .liveEvent:
@@ -389,6 +391,7 @@ enum GameTab: String {
     case challenges
     case leaderboard
     case guild
+    case guildEvent
     case seasonalEvent
     case liveEvent
     case profile
