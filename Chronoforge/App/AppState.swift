@@ -25,6 +25,13 @@ class AppState {
         self.engine = GameEngine(player: player, saveManager: saveManager)
         self.storeManager = StoreManager()
         self.leaderboardManager = LeaderboardManager()
+
+        // Wire up consumable purchase delivery
+        let engineRef = self.engine
+        storeManager.onConsumablePurchased = { reward in
+            engineRef.applyStoreReward(reward)
+        }
+
         engine.start()
         Task {
             await storeManager.loadProducts()

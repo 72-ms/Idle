@@ -570,6 +570,50 @@ class GameEngine {
         }
     }
 
+    // MARK: - Store Reward Delivery
+
+    func applyStoreReward(_ reward: StoreManager.ConsumableReward) {
+        switch reward {
+        case .chronoShards(let amount):
+            player.chronoShards += amount
+            player.totalChronoShardsEarned += amount
+            player.skillTree.availablePoints += amount
+
+        case .epochCrystals(let amount):
+            player.epochCrystals += amount
+
+        case .timeWarp(let hours):
+            let seconds = TimeInterval(hours * 3600)
+            let earnings = totalProductionRate * Decimal(seconds)
+            player.temporalEnergy += earnings
+            player.totalTEEarned += earnings
+            player.totalLifetimeTEEarned += earnings
+
+        case .productionBoost(let multiplier, let minutes):
+            player.activeBoostMultiplier = multiplier
+            player.boostExpirationDate = Date().addingTimeInterval(TimeInterval(minutes * 60))
+            recalculateProduction()
+
+        case .bundle(let shards, let crystals, let relicMaterials,
+                     let boostMultiplier, let boostMinutes,
+                     let permanentTapBonus, let cosmeticID):
+            player.chronoShards += shards
+            player.totalChronoShardsEarned += shards
+            player.skillTree.availablePoints += shards
+            player.epochCrystals += crystals
+            player.relicMaterials += relicMaterials
+            player.tapPower += permanentTapBonus
+            player.activeBoostMultiplier = boostMultiplier
+            player.boostExpirationDate = Date().addingTimeInterval(TimeInterval(boostMinutes * 60))
+            if let cosmeticID {
+                player.ownedCosmetics.insert(cosmeticID)
+            }
+            recalculateProduction()
+        }
+
+        save()
+    }
+
     func recalculateProduction() {
         var total: Decimal = 0
 

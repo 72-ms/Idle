@@ -82,6 +82,69 @@ private extension Array {
     }
 }
 
+// MARK: - Currency Pack
+
+struct CurrencyPack: Identifiable {
+    let id: String
+    let name: String
+    let description: String
+    let productID: String
+    let amount: Int
+    let bonusAmount: Int
+    let currencyType: CurrencyPackType
+    let badge: String?
+
+    var totalAmount: Int { amount + bonusAmount }
+
+    enum CurrencyPackType: String {
+        case chronoShards
+        case epochCrystals
+    }
+}
+
+// MARK: - Time Warp Pack
+
+struct TimeWarpPack: Identifiable {
+    let id: String
+    let name: String
+    let description: String
+    let productID: String
+    let hours: Int
+}
+
+// MARK: - Booster Pack
+
+struct BoosterPack: Identifiable {
+    let id: String
+    let name: String
+    let description: String
+    let productID: String
+    let multiplier: Decimal
+    let durationMinutes: Int
+}
+
+// MARK: - Premium Bundle
+
+struct PremiumBundle: Identifiable {
+    let id: String
+    let name: String
+    let description: String
+    let productID: String
+    let shards: Int
+    let crystals: Int
+    let boostMultiplier: Decimal
+    let boostMinutes: Int
+    let relicMaterials: Int
+    let exclusiveCosmeticID: String?
+    let permanentTapBonus: Decimal
+    let badge: String
+    let accent: BundleAccent
+
+    enum BundleAccent: String {
+        case blue, purple, gold
+    }
+}
+
 // MARK: - StoreManager
 
 @Observable
@@ -94,6 +157,36 @@ final class StoreManager {
         static let starterPack = "com.chronoforge.starterpack"
         static let chronoPassMonthly = "com.chronoforge.chronopass.monthly"
 
+        // VIP subscription
+        static let vipMonthly = "com.chronoforge.vip.monthly"
+
+        // Chrono Shard packs (consumable)
+        static let shardPackSmall = "com.chronoforge.shards.small"
+        static let shardPackMedium = "com.chronoforge.shards.medium"
+        static let shardPackLarge = "com.chronoforge.shards.large"
+        static let shardPackHuge = "com.chronoforge.shards.huge"
+        static let shardPackMega = "com.chronoforge.shards.mega"
+
+        // Epoch Crystal packs (consumable)
+        static let crystalPackSmall = "com.chronoforge.crystals.small"
+        static let crystalPackMedium = "com.chronoforge.crystals.medium"
+        static let crystalPackLarge = "com.chronoforge.crystals.large"
+
+        // Time Warp (consumable) - skip hours of production
+        static let timeWarp1h = "com.chronoforge.timewarp.1h"
+        static let timeWarp8h = "com.chronoforge.timewarp.8h"
+        static let timeWarp24h = "com.chronoforge.timewarp.24h"
+
+        // Booster packs (consumable) - temporary production multiplier
+        static let boost2x30m = "com.chronoforge.boost.2x30m"
+        static let boost5x30m = "com.chronoforge.boost.5x30m"
+        static let boost10x1h = "com.chronoforge.boost.10x1h"
+
+        // Premium bundles (one-time)
+        static let progressionBundle = "com.chronoforge.bundle.progression"
+        static let legendaryBundle = "com.chronoforge.bundle.legendary"
+        static let titanBundle = "com.chronoforge.bundle.titan"
+
         // Cosmetic shop prefixes
         static let cosmeticPrefix = "com.chronoforge.cosmetic."
 
@@ -104,13 +197,14 @@ final class StoreManager {
         static let avatarPrefix = "\(cosmeticPrefix)avatar."
 
         static var allProductIDs: Set<String> {
-            var ids: Set<String> = [
-                removeAds,
-                starterPack,
-                chronoPassMonthly
-            ]
-            // Cosmetic IDs are loaded from the catalog at runtime
-            return ids
+            Set([
+                removeAds, starterPack, chronoPassMonthly, vipMonthly,
+                shardPackSmall, shardPackMedium, shardPackLarge, shardPackHuge, shardPackMega,
+                crystalPackSmall, crystalPackMedium, crystalPackLarge,
+                timeWarp1h, timeWarp8h, timeWarp24h,
+                boost2x30m, boost5x30m, boost10x1h,
+                progressionBundle, legendaryBundle, titanBundle
+            ])
         }
     }
 
@@ -118,7 +212,11 @@ final class StoreManager {
 
     private(set) var isAdFree: Bool = false
     private(set) var isChronoPassActive: Bool = false
+    private(set) var isVIPActive: Bool = false
     private(set) var hasStarterPack: Bool = false
+    private(set) var hasProgressionBundle: Bool = false
+    private(set) var hasLegendaryBundle: Bool = false
+    private(set) var hasTitanBundle: Bool = false
     private(set) var ownedCosmeticIDs: Set<String> = []
 
     // MARK: - Products
@@ -127,7 +225,12 @@ final class StoreManager {
     private(set) var removeAdsProduct: Product?
     private(set) var starterPackProduct: Product?
     private(set) var chronoPassProduct: Product?
+    private(set) var vipProduct: Product?
     private(set) var cosmeticProducts: [Product] = []
+    private(set) var currencyPackProducts: [Product] = []
+    private(set) var timeWarpProducts: [Product] = []
+    private(set) var boosterProducts: [Product] = []
+    private(set) var bundleProducts: [Product] = []
 
     // MARK: - Chrono Pass State
 
@@ -139,9 +242,13 @@ final class StoreManager {
         claimedPremiumTiers: []
     )
 
-    // MARK: - Cosmetic Catalog
+    // MARK: - Catalogs
 
     private(set) var cosmeticCatalog: [CosmeticItem] = []
+    private(set) var currencyPacks: [CurrencyPack] = []
+    private(set) var timeWarpPacks: [TimeWarpPack] = []
+    private(set) var boosterPacks: [BoosterPack] = []
+    private(set) var premiumBundles: [PremiumBundle] = []
 
     // MARK: - Purchase State
 
@@ -154,6 +261,20 @@ final class StoreManager {
     private let entitlementsCacheKey = "StoreManager.entitlements"
     private let chronoPassProgressKey = "StoreManager.chronoPassProgress"
 
+    /// Callback invoked when a consumable purchase needs to grant resources.
+    /// Set by AppState/GameEngine to wire up resource delivery.
+    var onConsumablePurchased: ((ConsumableReward) -> Void)?
+
+    enum ConsumableReward {
+        case chronoShards(Int)
+        case epochCrystals(Int)
+        case timeWarp(hours: Int)
+        case productionBoost(multiplier: Decimal, minutes: Int)
+        case bundle(shards: Int, crystals: Int, relicMaterials: Int,
+                    boostMultiplier: Decimal, boostMinutes: Int,
+                    permanentTapBonus: Decimal, cosmeticID: String?)
+    }
+
     // MARK: - Init
 
     init() {
@@ -161,6 +282,10 @@ final class StoreManager {
         loadChronoPassProgress()
         buildChronoPassTiers()
         buildCosmeticCatalog()
+        buildCurrencyPacks()
+        buildTimeWarpPacks()
+        buildBoosterPacks()
+        buildPremiumBundles()
 
         transactionListener = listenForTransactions()
 
@@ -190,7 +315,20 @@ final class StoreManager {
             removeAdsProduct = storeProducts.first { $0.id == ProductIDs.removeAds }
             starterPackProduct = storeProducts.first { $0.id == ProductIDs.starterPack }
             chronoPassProduct = storeProducts.first { $0.id == ProductIDs.chronoPassMonthly }
+            vipProduct = storeProducts.first { $0.id == ProductIDs.vipMonthly }
             cosmeticProducts = storeProducts.filter { $0.id.hasPrefix(ProductIDs.cosmeticPrefix) }
+
+            let currencyIDs = Set(currencyPacks.map(\.productID))
+            currencyPackProducts = storeProducts.filter { currencyIDs.contains($0.id) }
+
+            let timeWarpIDs = Set(timeWarpPacks.map(\.productID))
+            timeWarpProducts = storeProducts.filter { timeWarpIDs.contains($0.id) }
+
+            let boosterIDs = Set(boosterPacks.map(\.productID))
+            boosterProducts = storeProducts.filter { boosterIDs.contains($0.id) }
+
+            let bundleIDs = Set(premiumBundles.map(\.productID))
+            bundleProducts = storeProducts.filter { bundleIDs.contains($0.id) }
         } catch {
             lastError = "Failed to load products: \(error.localizedDescription)"
         }
@@ -273,6 +411,69 @@ final class StoreManager {
         return await purchase(product)
     }
 
+    @MainActor
+    func purchaseVIP() async -> Bool {
+        guard let product = vipProduct else {
+            lastError = "VIP subscription not available."
+            return false
+        }
+        return await purchase(product)
+    }
+
+    @MainActor
+    func purchaseCurrencyPack(_ pack: CurrencyPack) async -> Bool {
+        guard let product = currencyPackProducts.first(where: { $0.id == pack.productID }) else {
+            lastError = "Currency pack not available."
+            return false
+        }
+        return await purchase(product)
+    }
+
+    @MainActor
+    func purchaseTimeWarp(_ pack: TimeWarpPack) async -> Bool {
+        guard let product = timeWarpProducts.first(where: { $0.id == pack.productID }) else {
+            lastError = "Time Warp not available."
+            return false
+        }
+        return await purchase(product)
+    }
+
+    @MainActor
+    func purchaseBooster(_ pack: BoosterPack) async -> Bool {
+        guard let product = boosterProducts.first(where: { $0.id == pack.productID }) else {
+            lastError = "Booster not available."
+            return false
+        }
+        return await purchase(product)
+    }
+
+    @MainActor
+    func purchaseBundle(_ bundle: PremiumBundle) async -> Bool {
+        guard let product = bundleProducts.first(where: { $0.id == bundle.productID }) else {
+            lastError = "Bundle not available."
+            return false
+        }
+        return await purchase(product)
+    }
+
+    // MARK: - Product Lookup
+
+    func product(forCurrencyPack pack: CurrencyPack) -> Product? {
+        currencyPackProducts.first { $0.id == pack.productID }
+    }
+
+    func product(forTimeWarp pack: TimeWarpPack) -> Product? {
+        timeWarpProducts.first { $0.id == pack.productID }
+    }
+
+    func product(forBooster pack: BoosterPack) -> Product? {
+        boosterProducts.first { $0.id == pack.productID }
+    }
+
+    func product(forBundle bundle: PremiumBundle) -> Product? {
+        bundleProducts.first { $0.id == bundle.productID }
+    }
+
     // MARK: - Restore Purchases
 
     @MainActor
@@ -291,7 +492,11 @@ final class StoreManager {
     func refreshEntitlements() async {
         var adFree = false
         var passActive = false
+        var vipActive = false
         var starterOwned = false
+        var progressionOwned = false
+        var legendaryOwned = false
+        var titanOwned = false
         var cosmetics: Set<String> = []
 
         for await result in Transaction.currentEntitlements {
@@ -315,20 +520,42 @@ final class StoreManager {
                     passActive = true
                 }
 
+            case ProductIDs.vipMonthly:
+                if transaction.revocationDate == nil,
+                   let expirationDate = transaction.expirationDate,
+                   expirationDate > Date() {
+                    vipActive = true
+                }
+
+            case ProductIDs.progressionBundle:
+                if transaction.revocationDate == nil { progressionOwned = true }
+
+            case ProductIDs.legendaryBundle:
+                if transaction.revocationDate == nil { legendaryOwned = true }
+
+            case ProductIDs.titanBundle:
+                if transaction.revocationDate == nil { titanOwned = true }
+
             default:
                 if transaction.productID.hasPrefix(ProductIDs.cosmeticPrefix),
                    transaction.revocationDate == nil {
-                    // Map product ID back to cosmetic item ID
                     if let cosmeticItem = cosmeticCatalog.first(where: { $0.productID == transaction.productID }) {
                         cosmetics.insert(cosmeticItem.id)
                     }
                 }
+                // Consumables (shards, crystals, time warps, boosters) are
+                // handled at purchase time via applyTransaction — they don't
+                // persist as entitlements.
             }
         }
 
         isAdFree = adFree
         isChronoPassActive = passActive
+        isVIPActive = vipActive
         hasStarterPack = starterOwned
+        hasProgressionBundle = progressionOwned
+        hasLegendaryBundle = legendaryOwned
+        hasTitanBundle = titanOwned
         ownedCosmeticIDs = cosmetics
 
         cacheEntitlements()
@@ -449,16 +676,75 @@ final class StoreManager {
                 isChronoPassActive = false
             }
 
+        case ProductIDs.vipMonthly:
+            if transaction.revocationDate == nil,
+               let expiration = transaction.expirationDate,
+               expiration > Date() {
+                isVIPActive = true
+            } else {
+                isVIPActive = false
+            }
+
+        case ProductIDs.progressionBundle:
+            if transaction.revocationDate == nil {
+                hasProgressionBundle = true
+                if let bundle = premiumBundles.first(where: { $0.productID == ProductIDs.progressionBundle }) {
+                    deliverBundleReward(bundle)
+                }
+            }
+
+        case ProductIDs.legendaryBundle:
+            if transaction.revocationDate == nil {
+                hasLegendaryBundle = true
+                if let bundle = premiumBundles.first(where: { $0.productID == ProductIDs.legendaryBundle }) {
+                    deliverBundleReward(bundle)
+                }
+            }
+
+        case ProductIDs.titanBundle:
+            if transaction.revocationDate == nil {
+                hasTitanBundle = true
+                if let bundle = premiumBundles.first(where: { $0.productID == ProductIDs.titanBundle }) {
+                    deliverBundleReward(bundle)
+                }
+            }
+
         default:
             if transaction.productID.hasPrefix(ProductIDs.cosmeticPrefix),
                transaction.revocationDate == nil {
                 if let cosmeticItem = cosmeticCatalog.first(where: { $0.productID == transaction.productID }) {
                     ownedCosmeticIDs.insert(cosmeticItem.id)
                 }
+            } else if let pack = currencyPacks.first(where: { $0.productID == transaction.productID }) {
+                switch pack.currencyType {
+                case .chronoShards:
+                    onConsumablePurchased?(.chronoShards(pack.totalAmount))
+                case .epochCrystals:
+                    onConsumablePurchased?(.epochCrystals(pack.totalAmount))
+                }
+            } else if let warp = timeWarpPacks.first(where: { $0.productID == transaction.productID }) {
+                onConsumablePurchased?(.timeWarp(hours: warp.hours))
+            } else if let booster = boosterPacks.first(where: { $0.productID == transaction.productID }) {
+                onConsumablePurchased?(.productionBoost(
+                    multiplier: booster.multiplier,
+                    minutes: booster.durationMinutes
+                ))
             }
         }
 
         cacheEntitlements()
+    }
+
+    private func deliverBundleReward(_ bundle: PremiumBundle) {
+        onConsumablePurchased?(.bundle(
+            shards: bundle.shards,
+            crystals: bundle.crystals,
+            relicMaterials: bundle.relicMaterials,
+            boostMultiplier: bundle.boostMultiplier,
+            boostMinutes: bundle.boostMinutes,
+            permanentTapBonus: bundle.permanentTapBonus,
+            cosmeticID: bundle.exclusiveCosmeticID
+        ))
     }
 
     // MARK: - Persistence
@@ -467,7 +753,11 @@ final class StoreManager {
         let cache = EntitlementCache(
             isAdFree: isAdFree,
             isChronoPassActive: isChronoPassActive,
+            isVIPActive: isVIPActive,
             hasStarterPack: hasStarterPack,
+            hasProgressionBundle: hasProgressionBundle,
+            hasLegendaryBundle: hasLegendaryBundle,
+            hasTitanBundle: hasTitanBundle,
             ownedCosmeticIDs: ownedCosmeticIDs
         )
         if let data = try? JSONEncoder().encode(cache) {
@@ -482,7 +772,11 @@ final class StoreManager {
         }
         isAdFree = cache.isAdFree
         isChronoPassActive = cache.isChronoPassActive
+        isVIPActive = cache.isVIPActive
         hasStarterPack = cache.hasStarterPack
+        hasProgressionBundle = cache.hasProgressionBundle
+        hasLegendaryBundle = cache.hasLegendaryBundle
+        hasTitanBundle = cache.hasTitanBundle
         ownedCosmeticIDs = cache.ownedCosmeticIDs
     }
 
@@ -628,6 +922,162 @@ final class StoreManager {
 
         cosmeticCatalog = catalog
     }
+
+    // MARK: - Currency Pack Builder
+
+    private func buildCurrencyPacks() {
+        currencyPacks = [
+            CurrencyPack(
+                id: "shards_small", name: "Handful of Shards",
+                description: "A small pouch of Chrono Shards.",
+                productID: ProductIDs.shardPackSmall,
+                amount: 50, bonusAmount: 0,
+                currencyType: .chronoShards, badge: nil
+            ),
+            CurrencyPack(
+                id: "shards_medium", name: "Shard Satchel",
+                description: "A generous satchel of Chrono Shards.",
+                productID: ProductIDs.shardPackMedium,
+                amount: 150, bonusAmount: 25,
+                currencyType: .chronoShards, badge: "+17% Bonus"
+            ),
+            CurrencyPack(
+                id: "shards_large", name: "Shard Chest",
+                description: "A heavy chest brimming with Chrono Shards.",
+                productID: ProductIDs.shardPackLarge,
+                amount: 500, bonusAmount: 125,
+                currencyType: .chronoShards, badge: "+25% Bonus"
+            ),
+            CurrencyPack(
+                id: "shards_huge", name: "Shard Vault",
+                description: "An entire vault of Chrono Shards. Serious collectors only.",
+                productID: ProductIDs.shardPackHuge,
+                amount: 1200, bonusAmount: 400,
+                currencyType: .chronoShards, badge: "+33% Bonus"
+            ),
+            CurrencyPack(
+                id: "shards_mega", name: "Temporal Treasury",
+                description: "An unfathomable treasury of Chrono Shards. The ultimate haul.",
+                productID: ProductIDs.shardPackMega,
+                amount: 3000, bonusAmount: 1500,
+                currencyType: .chronoShards, badge: "Best Value"
+            ),
+            CurrencyPack(
+                id: "crystals_small", name: "Crystal Fragment",
+                description: "A handful of precious Epoch Crystals.",
+                productID: ProductIDs.crystalPackSmall,
+                amount: 5, bonusAmount: 0,
+                currencyType: .epochCrystals, badge: nil
+            ),
+            CurrencyPack(
+                id: "crystals_medium", name: "Crystal Cluster",
+                description: "A cluster of gleaming Epoch Crystals.",
+                productID: ProductIDs.crystalPackMedium,
+                amount: 15, bonusAmount: 3,
+                currencyType: .epochCrystals, badge: "+20% Bonus"
+            ),
+            CurrencyPack(
+                id: "crystals_large", name: "Crystal Motherload",
+                description: "A massive cache of Epoch Crystals. Fortune favors the bold.",
+                productID: ProductIDs.crystalPackLarge,
+                amount: 50, bonusAmount: 15,
+                currencyType: .epochCrystals, badge: "Best Value"
+            )
+        ]
+    }
+
+    // MARK: - Time Warp Builder
+
+    private func buildTimeWarpPacks() {
+        timeWarpPacks = [
+            TimeWarpPack(
+                id: "warp_1h", name: "Minor Time Warp",
+                description: "Instantly collect 1 hour of production.",
+                productID: ProductIDs.timeWarp1h, hours: 1
+            ),
+            TimeWarpPack(
+                id: "warp_8h", name: "Major Time Warp",
+                description: "Instantly collect 8 hours of production.",
+                productID: ProductIDs.timeWarp8h, hours: 8
+            ),
+            TimeWarpPack(
+                id: "warp_24h", name: "Temporal Rift",
+                description: "Instantly collect 24 hours of production. Massive leap forward.",
+                productID: ProductIDs.timeWarp24h, hours: 24
+            )
+        ]
+    }
+
+    // MARK: - Booster Builder
+
+    private func buildBoosterPacks() {
+        boosterPacks = [
+            BoosterPack(
+                id: "boost_2x30m", name: "Chrono Catalyst",
+                description: "2x production for 30 minutes.",
+                productID: ProductIDs.boost2x30m,
+                multiplier: 2, durationMinutes: 30
+            ),
+            BoosterPack(
+                id: "boost_5x30m", name: "Temporal Surge",
+                description: "5x production for 30 minutes.",
+                productID: ProductIDs.boost5x30m,
+                multiplier: 5, durationMinutes: 30
+            ),
+            BoosterPack(
+                id: "boost_10x1h", name: "Epoch Overdrive",
+                description: "10x production for 1 hour. Maximum output.",
+                productID: ProductIDs.boost10x1h,
+                multiplier: 10, durationMinutes: 60
+            )
+        ]
+    }
+
+    // MARK: - Premium Bundle Builder
+
+    private func buildPremiumBundles() {
+        premiumBundles = [
+            PremiumBundle(
+                id: "bundle_progression",
+                name: "Progression Pack",
+                description: "Jump-start your timeline with shards, crystals, and a permanent tap boost.",
+                productID: ProductIDs.progressionBundle,
+                shards: 500, crystals: 10,
+                boostMultiplier: 3, boostMinutes: 120,
+                relicMaterials: 50,
+                exclusiveCosmeticID: nil,
+                permanentTapBonus: 2,
+                badge: "Popular",
+                accent: .blue
+            ),
+            PremiumBundle(
+                id: "bundle_legendary",
+                name: "Legendary Bundle",
+                description: "Massive resources, an exclusive avatar, and a permanent tap multiplier. For dedicated Chronoforgers.",
+                productID: ProductIDs.legendaryBundle,
+                shards: 2000, crystals: 40,
+                boostMultiplier: 5, boostMinutes: 240,
+                relicMaterials: 200,
+                exclusiveCosmeticID: "avatar_chrono_lord",
+                permanentTapBonus: 5,
+                badge: "Best Value",
+                accent: .purple
+            ),
+            PremiumBundle(
+                id: "bundle_titan",
+                name: "Titan Bundle",
+                description: "The ultimate package for temporal titans. Exclusive animated cosmetic, absurd resources, and a huge permanent boost.",
+                productID: ProductIDs.titanBundle,
+                shards: 6000, crystals: 120,
+                boostMultiplier: 10, boostMinutes: 480,
+                relicMaterials: 500,
+                exclusiveCosmeticID: "avatar_temporal_titan",
+                permanentTapBonus: 10,
+                badge: "Whale Tier",
+                accent: .gold
+            )
+        ]
+    }
 }
 
 // MARK: - Entitlement Cache
@@ -635,6 +1085,10 @@ final class StoreManager {
 private struct EntitlementCache: Codable {
     let isAdFree: Bool
     let isChronoPassActive: Bool
+    let isVIPActive: Bool
     let hasStarterPack: Bool
+    let hasProgressionBundle: Bool
+    let hasLegendaryBundle: Bool
+    let hasTitanBundle: Bool
     let ownedCosmeticIDs: Set<String>
 }
