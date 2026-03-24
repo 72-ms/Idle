@@ -8,11 +8,17 @@ final class LiveEventManager {
     private(set) var currentEvent: LiveEventConfig?
     private(set) var upcomingEvents: [LiveEventConfig] = []
 
-    /// Competitive leaderboard for the current event.
+    /// Event-wide leaderboard (total points across all days).
     private(set) var leaderboardEntries: [EventLeaderboardEntry] = []
     private(set) var localPlayerRank: Int?
     private(set) var localPlayerPercentile: Double?
     private(set) var totalParticipants: Int = 0
+
+    /// Daily leaderboard (points for the selected/current day).
+    private(set) var dailyLeaderboardEntries: [EventLeaderboardEntry] = []
+    private(set) var dailyPlayerRank: Int?
+    private(set) var dailyPlayerPercentile: Double?
+    private(set) var dailyTotalParticipants: Int = 0
 
     /// Reference to LeaderboardManager for Game Center integration.
     var leaderboardManager: LeaderboardManager?
@@ -154,12 +160,13 @@ final class LiveEventManager {
             thresholds = [2000, 8000, 30000, 100000, 400000].map { $0 * scale }
         }
 
+        // Participation-tier rewards — modest, just for showing up and playing
         let rewards: [LiveEventReward] = [
-            .chronoShards(10 * scale),
-            .relicMaterials(15 * scale),
-            .chronoShards(30 * scale),
-            .productionBoost(multiplier: 3, minutes: 30),
-            .eventToken(5 * scale)
+            .chronoShards(3 * scale),
+            .relicMaterials(5 * scale),
+            .chronoShards(8 * scale),
+            .relicMaterials(12 * scale),
+            .eventToken(1 * scale)
         ]
 
         return zip(thresholds, rewards).map { pts, reward in
@@ -171,41 +178,33 @@ final class LiveEventManager {
 
     static func generateTotalMilestones(theme: LiveEventTheme, scaleFactor: Int, eventId: String) -> [LiveEventTotalMilestone] {
         let s = scaleFactor
+        // Participation-tier rewards for cumulative effort. The real prizes
+        // come from placement — these just keep players engaged and progressing.
         return [
             LiveEventTotalMilestone(
                 totalPoints: 5000 * s,
-                reward: .chronoShards(50 * s),
+                reward: .chronoShards(15 * s),
                 isExclusive: false
             ),
             LiveEventTotalMilestone(
                 totalPoints: 25000 * s,
-                reward: .relicMaterials(50 * s),
+                reward: .relicMaterials(20 * s),
                 isExclusive: false
             ),
             LiveEventTotalMilestone(
                 totalPoints: 75000 * s,
-                reward: .epochCrystals(10 * s),
+                reward: .epochCrystals(3 * s),
                 isExclusive: false
             ),
             LiveEventTotalMilestone(
                 totalPoints: 200000 * s,
-                reward: .productionBoost(multiplier: 5, minutes: 120),
+                reward: .eventToken(5 * s),
                 isExclusive: false
             ),
             LiveEventTotalMilestone(
                 totalPoints: 500000 * s,
-                reward: .eventToken(25 * s),
+                reward: .chronoShards(30 * s),
                 isExclusive: false
-            ),
-            LiveEventTotalMilestone(
-                totalPoints: 1000000 * s,
-                reward: .cosmetic("event_\(eventId)_frame"),
-                isExclusive: true
-            ),
-            LiveEventTotalMilestone(
-                totalPoints: 2500000 * s,
-                reward: .cosmetic("event_\(eventId)_title"),
-                isExclusive: true
             )
         ]
     }
@@ -275,6 +274,10 @@ final class LiveEventManager {
 
         // Ensure we have a snapshot for today
         if player.liveEventState.dayStartSnapshots[dayIndex] == nil {
+            // If we're starting a new day, finalize the previous day's placement
+            if dayIndex > 0 {
+                finalizeDailyPlacement(dayIndex: dayIndex - 1, player: player)
+            }
             player.liveEventState.dayStartSnapshots[dayIndex] = DayStartSnapshot.capture(from: player)
         }
 
@@ -292,7 +295,7 @@ final class LiveEventManager {
             player.liveEventState.dailyPoints[dayIndex] = dayPoints
             player.liveEventState.totalPoints += delta
 
-            // Submit updated score to the event leaderboard
+            // Submit updated scores to event + daily leaderboards
             submitScore(player: player)
         }
     }
@@ -367,75 +370,62 @@ final class LiveEventManager {
 
     // MARK: - Leaderboard
 
-    /// Submits the player's current event score to Game Center.
+    /// Submits the player's total event score and daily score to Game Center.
     func submitScore(player: PlayerState) {
         guard let event = currentEvent else { return }
-        let score = player.liveEventState.totalPoints
-        guard score > 0 else { return }
-        leaderboardManager?.submitScore(score, to: event.leaderboardID)
+        let totalScore = player.liveEventState.totalPoints
+        guard totalScore > 0 else { return }
+
+        // Submit total event score
+        leaderboardManager?.submitScore(totalScore, to: event.leaderboardID)
+
+        // Submit daily score
+        if let dayIndex = event.currentDayIndex {
+            let dayScore = player.liveEventState.pointsForDay(dayIndex)
+            if dayScore > 0 {
+                leaderboardManager?.submitScore(dayScore, to: event.dailyLeaderboardID(dayIndex: dayIndex))
+            }
+        }
     }
 
-    /// Loads the event leaderboard from Game Center and fills in simulated
-    /// competitors to ensure the board always feels populated.
+    /// Loads the event leaderboard from Game Center. Real players only — no fakes.
     func loadLeaderboard(player: PlayerState) async {
         guard let event = currentEvent else { return }
 
-        // Load real Game Center entries
-        var realEntries: [LeaderboardEntry] = []
-        if let lbManager = leaderboardManager {
-            await lbManager.loadEntries(for: event.leaderboardID)
-            realEntries = lbManager.leaderboardEntries
+        guard let lbManager = leaderboardManager else {
+            await MainActor.run {
+                self.leaderboardEntries = []
+                self.localPlayerRank = nil
+                self.localPlayerPercentile = nil
+                self.totalParticipants = 0
+            }
+            return
         }
 
-        let playerScore = player.liveEventState.totalPoints
+        await lbManager.loadEntries(for: event.leaderboardID)
+        let gcEntries = lbManager.leaderboardEntries
 
-        // Generate simulated competitors to ensure a full leaderboard.
-        // This guarantees there's always a competitive feel even with low GC adoption.
-        let simulated = Self.generateSimulatedCompetitors(
-            playerScore: playerScore,
-            eventScaleFactor: event.scaleFactor,
-            realEntryCount: realEntries.count
-        )
-
-        // Merge real + simulated, sort by score descending, assign ranks
-        var combined: [(name: String, score: Int, isLocal: Bool, vip: VIPTier)] = []
-
-        for entry in realEntries {
-            combined.append((entry.playerName, entry.score, entry.isLocalPlayer, entry.vipTier))
-        }
-        for sim in simulated {
-            combined.append((sim.name, sim.score, false, sim.vip))
-        }
-
-        // Add local player if not already present from GC
-        if !combined.contains(where: { $0.isLocal }) && playerScore > 0 {
-            combined.append(("You", playerScore, true, .none))
-        }
-
-        combined.sort { $0.score > $1.score }
-
-        let total = combined.count
+        let total = gcEntries.count
         var entries: [EventLeaderboardEntry] = []
         var playerRank: Int?
         var playerPct: Double?
 
-        for (i, entry) in combined.enumerated() {
-            let rank = i + 1
-            let percentile = Double(rank) / Double(total) * 100.0
+        for entry in gcEntries {
+            let percentile = total > 0 ? Double(entry.rank) / Double(total) * 100.0 : 100.0
             let tier = EventPlacementTier.tier(forPercentile: percentile)
 
             entries.append(EventLeaderboardEntry(
-                id: entry.isLocal ? "local" : "entry_\(i)",
-                rank: rank,
-                playerName: entry.name,
+                id: entry.isLocalPlayer ? "local" : "entry_\(entry.rank)",
+                rank: entry.rank,
+                playerName: entry.playerName,
                 score: entry.score,
-                isLocalPlayer: entry.isLocal,
-                vipTier: entry.vip,
+                isLocalPlayer: entry.isLocalPlayer,
+                vipTier: entry.vipTier,
                 placementTier: tier
             ))
 
-            if entry.isLocal {
-                playerRank = rank
+            if entry.isLocalPlayer {
+                playerRank = entry.rank
                 playerPct = percentile
             }
         }
@@ -448,22 +438,89 @@ final class LiveEventManager {
         }
     }
 
-    /// Finalizes placement when an event ends. Called once per event.
+    /// Loads the daily leaderboard for a specific day.
+    func loadDailyLeaderboard(dayIndex: Int) async {
+        guard let event = currentEvent else {
+            await MainActor.run {
+                self.dailyLeaderboardEntries = []
+                self.dailyPlayerRank = nil
+                self.dailyPlayerPercentile = nil
+                self.dailyTotalParticipants = 0
+            }
+            return
+        }
+
+        guard let lbManager = leaderboardManager else {
+            await MainActor.run {
+                self.dailyLeaderboardEntries = []
+                self.dailyPlayerRank = nil
+                self.dailyPlayerPercentile = nil
+                self.dailyTotalParticipants = 0
+            }
+            return
+        }
+
+        await lbManager.loadEntries(for: event.dailyLeaderboardID(dayIndex: dayIndex))
+        let gcEntries = lbManager.leaderboardEntries
+
+        let total = gcEntries.count
+        var entries: [EventLeaderboardEntry] = []
+        var playerRank: Int?
+        var playerPct: Double?
+
+        for entry in gcEntries {
+            let percentile = total > 0 ? Double(entry.rank) / Double(total) * 100.0 : 100.0
+            let tier = EventPlacementTier.tier(forPercentile: percentile)
+
+            entries.append(EventLeaderboardEntry(
+                id: entry.isLocalPlayer ? "daily_local" : "daily_\(entry.rank)",
+                rank: entry.rank,
+                playerName: entry.playerName,
+                score: entry.score,
+                isLocalPlayer: entry.isLocalPlayer,
+                vipTier: entry.vipTier,
+                placementTier: tier
+            ))
+
+            if entry.isLocalPlayer {
+                playerRank = entry.rank
+                playerPct = percentile
+            }
+        }
+
+        await MainActor.run {
+            self.dailyLeaderboardEntries = entries
+            self.dailyPlayerRank = playerRank
+            self.dailyPlayerPercentile = playerPct
+            self.dailyTotalParticipants = total
+        }
+    }
+
+    /// Finalizes event-wide placement when an event ends.
     func finalizePlacement(player: PlayerState) {
         guard player.liveEventState.finalRank == nil else { return }
         guard player.liveEventState.totalPoints > 0 else { return }
 
-        player.liveEventState.finalRank = localPlayerRank ?? 1
-        player.liveEventState.finalPercentile = localPlayerPercentile ?? 50.0
+        player.liveEventState.finalRank = localPlayerRank
+        player.liveEventState.finalPercentile = localPlayerPercentile
     }
 
-    /// Claims the placement reward for a completed event.
+    /// Snapshots the daily rank at the end of a day (called when day transitions).
+    func finalizeDailyPlacement(dayIndex: Int, player: PlayerState) {
+        guard player.liveEventState.dailyRanks[dayIndex] == nil else { return }
+        guard player.liveEventState.pointsForDay(dayIndex) > 0 else { return }
+
+        player.liveEventState.dailyRanks[dayIndex] = dailyPlayerRank
+        player.liveEventState.dailyPercentiles[dayIndex] = dailyPlayerPercentile
+    }
+
+    /// Claims the event-wide placement reward.
     func claimPlacementReward(player: PlayerState) -> Bool {
         guard let tier = player.liveEventState.placementTier else { return false }
         guard !player.liveEventState.claimedPlacementReward else { return false }
 
         let scaleFactor = currentEvent?.scaleFactor ?? 1
-        let rewards = tier.rewards(scaleFactor: scaleFactor)
+        let rewards = tier.eventRewards(scaleFactor: scaleFactor)
         for reward in rewards {
             deliverReward(reward, to: player)
         }
@@ -472,80 +529,20 @@ final class LiveEventManager {
         return true
     }
 
-    // MARK: - Simulated Competitors
+    /// Claims a daily placement reward for a completed day.
+    func claimDailyPlacementReward(dayIndex: Int, player: PlayerState) -> Bool {
+        guard !player.liveEventState.claimedDailyPlacementRewards.contains(dayIndex) else { return false }
+        guard let pct = player.liveEventState.dailyPercentiles[dayIndex] else { return false }
 
-    /// Generates a pool of simulated competitors with realistic score distributions.
-    /// Creates a bell curve centered near the player's score so they're always in
-    /// a competitive bracket — not always first, not always last.
-    private static func generateSimulatedCompetitors(
-        playerScore: Int,
-        eventScaleFactor: Int,
-        realEntryCount: Int
-    ) -> [(name: String, score: Int, vip: VIPTier)] {
-        // Target ~100 total entries; fewer sims if lots of real players
-        let simCount = max(20, 100 - realEntryCount)
-        let baseScore = max(1000, playerScore)
-
-        // Seeded from scale factor so the same event always has the same competitors
-        var rng = SeededRNG(seed: UInt64(eventScaleFactor * 7919 + 42))
-
-        let names = [
-            "ChronoKnight", "TimeWeaver", "EpochRider", "ForgeHammer", "TemporalAce",
-            "ShardHunter", "VoidWalker", "EraBreaker", "RelicSmith", "PrestigeLord",
-            "NovaCrafter", "AeonBlade", "FluxMaster", "DawnForger", "CosmicAnvil",
-            "SurgeKing", "InfernoSmith", "StormChaser", "MoonReaper", "RiftRunner",
-            "TimeLord99", "xXForgeXx", "CrystalMage", "EpochGrinder", "ShardQueen",
-            "NanoForge", "TurboPrestige", "IdleMaster", "TEFarmer", "GeneratorGod",
-            "RelicHoarder", "EraHopper", "TapKing420", "BoostAddict", "VoidKnight",
-            "SurgeQueen", "HammerTime", "ChronicleFan", "EventHero", "ForgeFury",
-            "TempoSlayer", "AstralSmith", "PrismForger", "NexusRunner", "WarpDriven",
-            "IronEpoch", "SilverForge", "GoldRush777", "DiamondHands", "PlatinumAge",
-            "OmegaForge", "AlphaStrike", "ZenithPeak", "NadirDeep", "TwilightForge",
-            "DuskHammer", "RainbowAnvil", "ThunderForge", "FrostEpoch", "BlazeSurge",
-            "PhantomForge", "ShadowSmith", "CrimsonEra", "EmeraldShard", "SapphireTE",
-            "RubyPrestige", "OnyxVoid", "TopazCraft", "AmethystAeon", "JadeForger",
-            "CobaltStorm", "TitanForge", "ZephyrRun", "MeteorStrike", "CometTail",
-            "NovaBlast", "PulsarGrind", "QuasarForge", "NebulaSmith", "GalaxyBrain",
-            "StarForger", "MoonForge", "SunSmith", "EclipseRun", "SolsticeGrind",
-            "EquinoxForge", "AuroraSmith", "MirageForge", "OasisRun", "MirageCraft",
-            "TempestForge", "CycloneRun", "TyphoonSmith", "HurricaneTE", "BreezeForge",
-            "GaleForce", "ZephyrSmith", "DraftForge", "CurrentRun", "FlowCraft"
-        ]
-
-        var results: [(name: String, score: Int, vip: VIPTier)] = []
-
-        for i in 0..<simCount {
-            let name = names[i % names.count] + (i >= names.count ? "\(i)" : "")
-
-            // Score distribution: top players well above, tail well below
-            let normalish = rng.nextGaussian()
-            let score: Int
-            let position = Double(i) / Double(simCount)
-
-            if position < 0.02 {
-                // Top 2%: whales who out-grind everyone
-                score = Int(Double(baseScore) * (2.5 + abs(normalish) * 1.5))
-            } else if position < 0.1 {
-                // Top 10%: dedicated grinders
-                score = Int(Double(baseScore) * (1.3 + abs(normalish) * 0.8))
-            } else if position < 0.5 {
-                // Middle 40%: competitive bracket near the player
-                score = Int(Double(baseScore) * (0.6 + normalish * 0.35))
-            } else {
-                // Bottom 50%: casual players
-                score = Int(Double(baseScore) * (0.1 + abs(normalish) * 0.25))
-            }
-
-            let vip: VIPTier
-            if position < 0.02 { vip = [.mythic, .eternal, .chronarch].randomElement()! }
-            else if position < 0.1 { vip = [.gold, .diamond, .obsidian].randomElement()! }
-            else if position < 0.3 { vip = [.none, .bronze, .silver, .gold].randomElement()! }
-            else { vip = [.none, .none, .none, .bronze].randomElement()! }
-
-            results.append((name, max(1, score), vip))
+        let tier = EventPlacementTier.tier(forPercentile: pct)
+        let scaleFactor = currentEvent?.scaleFactor ?? 1
+        let rewards = tier.dailyRewards(scaleFactor: scaleFactor)
+        for reward in rewards {
+            deliverReward(reward, to: player)
         }
 
-        return results
+        player.liveEventState.claimedDailyPlacementRewards.insert(dayIndex)
+        return true
     }
 
     // MARK: - Reward Delivery
@@ -598,15 +595,22 @@ final class LiveEventManager {
     /// Checks for event transitions. If the current event ended, finalizes
     /// placement for the player and rotates to the next event.
     func checkEventTransition(player: PlayerState?) {
-        if currentEvent?.hasEnded == true {
-            // Finalize placement before rotating away
+        if let event = currentEvent, event.hasEnded {
+            // Finalize all daily placements + event placement before rotating
             if let player {
+                for d in 0..<event.days.count {
+                    finalizeDailyPlacement(dayIndex: d, player: player)
+                }
                 finalizePlacement(player: player)
             }
             leaderboardEntries = []
             localPlayerRank = nil
             localPlayerPercentile = nil
             totalParticipants = 0
+            dailyLeaderboardEntries = []
+            dailyPlayerRank = nil
+            dailyPlayerPercentile = nil
+            dailyTotalParticipants = 0
         }
 
         if currentEvent?.hasEnded == true || currentEvent == nil {
@@ -652,48 +656,5 @@ final class LiveEventManager {
         case .cosmicDawn:
             return "A new cosmic dawn breaks across all timelines! Complete varied challenges each day for ultimate rewards."
         }
-    }
-}
-
-// MARK: - Seeded RNG
-
-/// Simple xoshiro256** PRNG for deterministic simulated competitor generation.
-private struct SeededRNG: RandomNumberGenerator {
-    private var state: (UInt64, UInt64, UInt64, UInt64)
-
-    init(seed: UInt64) {
-        // SplitMix64 to expand the seed into 4 state words
-        var s = seed
-        func next() -> UInt64 {
-            s &+= 0x9e3779b97f4a7c15
-            var z = s
-            z = (z ^ (z >> 30)) &* 0xbf58476d1ce4e5b9
-            z = (z ^ (z >> 27)) &* 0x94d049bb133111eb
-            return z ^ (z >> 31)
-        }
-        state = (next(), next(), next(), next())
-    }
-
-    mutating func next() -> UInt64 {
-        let result = rotl(state.1 &* 5, 7) &* 9
-        let t = state.1 << 17
-        state.2 ^= state.0
-        state.3 ^= state.1
-        state.1 ^= state.2
-        state.0 ^= state.3
-        state.2 ^= t
-        state.3 = rotl(state.3, 45)
-        return result
-    }
-
-    private func rotl(_ x: UInt64, _ k: Int) -> UInt64 {
-        (x << k) | (x >> (64 - k))
-    }
-
-    /// Approximate Gaussian via Box-Muller.
-    mutating func nextGaussian() -> Double {
-        let u1 = max(1e-10, Double(next()) / Double(UInt64.max))
-        let u2 = Double(next()) / Double(UInt64.max)
-        return (-2.0 * log(u1)).squareRoot() * cos(2.0 * .pi * u2)
     }
 }

@@ -391,45 +391,92 @@ enum EventPlacementTier: Int, Codable, CaseIterable, Comparable {
         }
     }
 
-    /// Placement rewards scale per tier. scaleFactor increases for later events.
-    func rewards(scaleFactor: Int) -> [LiveEventReward] {
+    /// Daily placement rewards — moderate, keeps players coming back each day.
+    func dailyRewards(scaleFactor: Int) -> [LiveEventReward] {
         let s = scaleFactor
         switch self {
         case .top1:
             return [
-                .chronoShards(500 * s),
-                .epochCrystals(50 * s),
-                .eventToken(100 * s),
-                .cosmetic("event_rank_champion_frame"),
-                .cosmetic("event_rank_champion_title")
+                .chronoShards(100 * s),
+                .epochCrystals(10 * s),
+                .eventToken(20 * s),
+                .productionBoost(multiplier: 5, minutes: 120)
             ]
         case .top5:
             return [
-                .chronoShards(250 * s),
-                .epochCrystals(25 * s),
-                .eventToken(50 * s),
-                .cosmetic("event_rank_elite_frame")
+                .chronoShards(60 * s),
+                .epochCrystals(5 * s),
+                .eventToken(10 * s)
             ]
         case .top10:
             return [
-                .chronoShards(150 * s),
-                .epochCrystals(15 * s),
-                .eventToken(30 * s)
+                .chronoShards(35 * s),
+                .eventToken(6 * s)
             ]
         case .top25:
             return [
-                .chronoShards(75 * s),
-                .epochCrystals(8 * s),
-                .eventToken(15 * s)
+                .chronoShards(15 * s),
+                .eventToken(3 * s)
             ]
         case .top50:
             return [
-                .chronoShards(30 * s),
-                .eventToken(5 * s)
+                .chronoShards(8 * s)
             ]
         case .top100:
             return [
-                .chronoShards(10 * s)
+                .chronoShards(3 * s)
+            ]
+        }
+    }
+
+    /// Event-wide placement rewards — the real prizes. Exclusive cosmetics, massive payouts.
+    func eventRewards(scaleFactor: Int) -> [LiveEventReward] {
+        let s = scaleFactor
+        switch self {
+        case .top1:
+            return [
+                .chronoShards(2000 * s),
+                .epochCrystals(200 * s),
+                .eventToken(300 * s),
+                .relicMaterials(500 * s),
+                .cosmetic("event_rank_champion_frame"),
+                .cosmetic("event_rank_champion_title"),
+                .cosmetic("event_rank_champion_aura")
+            ]
+        case .top5:
+            return [
+                .chronoShards(1000 * s),
+                .epochCrystals(100 * s),
+                .eventToken(150 * s),
+                .relicMaterials(250 * s),
+                .cosmetic("event_rank_elite_frame"),
+                .cosmetic("event_rank_elite_title")
+            ]
+        case .top10:
+            return [
+                .chronoShards(500 * s),
+                .epochCrystals(50 * s),
+                .eventToken(75 * s),
+                .relicMaterials(100 * s),
+                .cosmetic("event_rank_veteran_frame")
+            ]
+        case .top25:
+            return [
+                .chronoShards(200 * s),
+                .epochCrystals(20 * s),
+                .eventToken(30 * s),
+                .relicMaterials(50 * s)
+            ]
+        case .top50:
+            return [
+                .chronoShards(75 * s),
+                .epochCrystals(8 * s),
+                .eventToken(10 * s)
+            ]
+        case .top100:
+            return [
+                .chronoShards(20 * s),
+                .eventToken(3 * s)
             ]
         }
     }
@@ -465,8 +512,13 @@ struct LiveEventConfig: Codable, Identifiable {
     var isActive: Bool { Date() >= startDate && Date() <= endDate }
     var hasEnded: Bool { Date() > endDate }
 
-    /// Game Center leaderboard ID for this event.
+    /// Game Center leaderboard ID for overall event ranking.
     var leaderboardID: String { "com.chronoforge.event.\(id)" }
+
+    /// Game Center leaderboard ID for a specific day's ranking.
+    func dailyLeaderboardID(dayIndex: Int) -> String {
+        "com.chronoforge.event.\(id).day\(dayIndex)"
+    }
 
     /// The scale factor for placement rewards (later events = bigger rewards).
     var scaleFactor: Int {
@@ -560,12 +612,24 @@ struct LiveEventPlayerState: Codable {
     var dayStartSnapshots: [Int: DayStartSnapshot] = [:]
 
     // MARK: - Leaderboard / Placement
-    var finalRank: Int?                     // Set when event ends
-    var finalPercentile: Double?            // Set when event ends
-    var claimedPlacementReward: Bool = false // True after player claims their tier reward
+
+    /// Event-wide final placement (set when event ends).
+    var finalRank: Int?
+    var finalPercentile: Double?
+    var claimedPlacementReward: Bool = false
+
+    /// Per-day final placement (set when each day ends).
+    var dailyRanks: [Int: Int] = [:]           // day index -> final rank
+    var dailyPercentiles: [Int: Double] = [:]  // day index -> final percentile
+    var claimedDailyPlacementRewards: Set<Int> = []  // day indexes where reward was claimed
 
     var placementTier: EventPlacementTier? {
         guard let pct = finalPercentile else { return nil }
+        return EventPlacementTier.tier(forPercentile: pct)
+    }
+
+    func dailyPlacementTier(dayIndex: Int) -> EventPlacementTier? {
+        guard let pct = dailyPercentiles[dayIndex] else { return nil }
         return EventPlacementTier.tier(forPercentile: pct)
     }
 
@@ -581,6 +645,9 @@ struct LiveEventPlayerState: Codable {
         finalRank = nil
         finalPercentile = nil
         claimedPlacementReward = false
+        dailyRanks = [:]
+        dailyPercentiles = [:]
+        claimedDailyPlacementRewards = []
     }
 
     func pointsForDay(_ day: Int) -> Int {

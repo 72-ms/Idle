@@ -6,6 +6,7 @@ struct LiveEventView: View {
     @Environment(StoreManager.self) private var store
     @Environment(GameEngine.self) private var engine
     @State private var selectedDay: Int = 0
+    @State private var showDailyLeaderboard: Bool = true
 
     private var event: LiveEventConfig? { eventManager.currentEvent }
     private var state: LiveEventPlayerState { player.liveEventState }
@@ -39,6 +40,9 @@ struct LiveEventView: View {
             }
             Task {
                 await eventManager.loadLeaderboard(player: player)
+                if let dayIdx = event?.currentDayIndex {
+                    await eventManager.loadDailyLeaderboard(dayIndex: dayIdx)
+                }
             }
         }
     }
@@ -114,6 +118,9 @@ struct LiveEventView: View {
 
                     Button {
                         selectedDay = dayIndex
+                        if showDailyLeaderboard {
+                            Task { await eventManager.loadDailyLeaderboard(dayIndex: dayIndex) }
+                        }
                     } label: {
                         VStack(spacing: 4) {
                             Text("Day \(dayIndex + 1)")
@@ -516,25 +523,57 @@ struct LiveEventView: View {
     // MARK: - Leaderboard
 
     private func leaderboardSection(_ event: LiveEventConfig) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let entries = showDailyLeaderboard ? eventManager.dailyLeaderboardEntries : eventManager.leaderboardEntries
+        let playerRank = showDailyLeaderboard ? eventManager.dailyPlayerRank : eventManager.localPlayerRank
+        let playerPct = showDailyLeaderboard ? eventManager.dailyPlayerPercentile : eventManager.localPlayerPercentile
+        let participants = showDailyLeaderboard ? eventManager.dailyTotalParticipants : eventManager.totalParticipants
+
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Image(systemName: "list.number")
                     .foregroundStyle(themeAccent(event.theme))
-                Text("Event Leaderboard")
+                Text("Leaderboard")
                     .font(.headline)
                     .foregroundStyle(.white)
                 Spacer()
-                if eventManager.totalParticipants > 0 {
-                    Text("\(eventManager.totalParticipants) players")
+                if participants > 0 {
+                    Text("\(participants) players")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.4))
                 }
             }
 
+            // Daily / Event toggle
+            HStack(spacing: 0) {
+                Button {
+                    showDailyLeaderboard = true
+                    Task { await eventManager.loadDailyLeaderboard(dayIndex: selectedDay) }
+                } label: {
+                    Text("Day \(selectedDay + 1)")
+                        .font(.caption.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(showDailyLeaderboard ? themeAccent(event.theme).opacity(0.15) : Color.white.opacity(0.05))
+                        .foregroundStyle(showDailyLeaderboard ? themeAccent(event.theme) : .white.opacity(0.5))
+                }
+                Button {
+                    showDailyLeaderboard = false
+                    Task { await eventManager.loadLeaderboard(player: player) }
+                } label: {
+                    Text("Overall")
+                        .font(.caption.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(!showDailyLeaderboard ? themeAccent(event.theme).opacity(0.15) : Color.white.opacity(0.05))
+                        .foregroundStyle(!showDailyLeaderboard ? themeAccent(event.theme) : .white.opacity(0.5))
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+
             // Player rank summary
-            if let rank = eventManager.localPlayerRank,
-               let pct = eventManager.localPlayerPercentile {
+            if let rank = playerRank, let pct = playerPct {
                 let tier = EventPlacementTier.tier(forPercentile: pct)
+                let score = showDailyLeaderboard ? state.pointsForDay(selectedDay) : state.totalPoints
                 HStack(spacing: 12) {
                     Image(systemName: tier.iconName)
                         .font(.title2)
@@ -552,10 +591,10 @@ struct LiveEventView: View {
                     Spacer()
 
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(state.totalPoints)")
+                        Text(shortNumber(score))
                             .font(.subheadline.weight(.bold).monospacedDigit())
                             .foregroundStyle(themeAccent(event.theme))
-                        Text("your score")
+                        Text(showDailyLeaderboard ? "today" : "total")
                             .font(.caption2)
                             .foregroundStyle(.white.opacity(0.4))
                     }
@@ -567,52 +606,30 @@ struct LiveEventView: View {
                     RoundedRectangle(cornerRadius: 12)
                         .strokeBorder(tierColor(tier).opacity(0.2), lineWidth: 1)
                 )
+            } else if entries.isEmpty {
+                VStack(spacing: 6) {
+                    Image(systemName: "person.3.fill")
+                        .font(.title3)
+                        .foregroundStyle(.white.opacity(0.2))
+                    Text("No rankings yet")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.4))
+                    Text("Earn points to appear on the leaderboard!")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.3))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
             }
 
             // Top entries
-            let topEntries = Array(eventManager.leaderboardEntries.prefix(10))
+            let topEntries = Array(entries.prefix(25))
             ForEach(topEntries) { entry in
-                HStack(spacing: 10) {
-                    Text("#\(entry.rank)")
-                        .font(.caption.weight(.bold).monospacedDigit())
-                        .foregroundStyle(rankColor(entry.rank))
-                        .frame(width: 32, alignment: .trailing)
-
-                    if entry.vipTier != .none {
-                        Image(systemName: "crown.fill")
-                            .font(.system(size: 8))
-                            .foregroundStyle(vipColor(entry.vipTier))
-                    }
-
-                    Text(entry.playerName)
-                        .font(.subheadline.weight(entry.isLocalPlayer ? .bold : .regular))
-                        .foregroundStyle(entry.isLocalPlayer ? themeAccent(event.theme) : .white.opacity(0.8))
-                        .lineLimit(1)
-
-                    if entry.isLocalPlayer {
-                        Text("YOU")
-                            .font(.system(size: 7, weight: .heavy))
-                            .foregroundStyle(themeAccent(event.theme))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(themeAccent(event.theme).opacity(0.15))
-                            .clipShape(Capsule())
-                    }
-
-                    Spacer()
-
-                    Text(shortNumber(entry.score))
-                        .font(.caption.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(.white.opacity(0.6))
-                }
-                .padding(.vertical, 6)
-                .padding(.horizontal, 10)
-                .background(entry.isLocalPlayer ? themeAccent(event.theme).opacity(0.06) : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                leaderboardRow(entry, event: event)
             }
 
-            // Show player's position if outside top 10
-            if let rank = eventManager.localPlayerRank, rank > 10 {
+            // Show player's position if outside top entries
+            if let rank = playerRank, rank > 25 {
                 HStack {
                     Spacer()
                     Text("...")
@@ -620,41 +637,20 @@ struct LiveEventView: View {
                     Spacer()
                 }
 
-                if let localEntry = eventManager.leaderboardEntries.first(where: { $0.isLocalPlayer }) {
-                    HStack(spacing: 10) {
-                        Text("#\(localEntry.rank)")
-                            .font(.caption.weight(.bold).monospacedDigit())
-                            .foregroundStyle(themeAccent(event.theme))
-                            .frame(width: 32, alignment: .trailing)
-
-                        Text(localEntry.playerName)
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(themeAccent(event.theme))
-
-                        Text("YOU")
-                            .font(.system(size: 7, weight: .heavy))
-                            .foregroundStyle(themeAccent(event.theme))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(themeAccent(event.theme).opacity(0.15))
-                            .clipShape(Capsule())
-
-                        Spacer()
-
-                        Text(shortNumber(localEntry.score))
-                            .font(.caption.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(.white.opacity(0.6))
-                    }
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 10)
-                    .background(themeAccent(event.theme).opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                if let localEntry = entries.first(where: { $0.isLocalPlayer }) {
+                    leaderboardRow(localEntry, event: event)
                 }
             }
 
             // Refresh button
             Button {
-                Task { await eventManager.loadLeaderboard(player: player) }
+                Task {
+                    if showDailyLeaderboard {
+                        await eventManager.loadDailyLeaderboard(dayIndex: selectedDay)
+                    } else {
+                        await eventManager.loadLeaderboard(player: player)
+                    }
+                }
             } label: {
                 HStack {
                     Image(systemName: "arrow.clockwise")
@@ -671,60 +667,139 @@ struct LiveEventView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
+    private func leaderboardRow(_ entry: EventLeaderboardEntry, event: LiveEventConfig) -> some View {
+        HStack(spacing: 10) {
+            Text("#\(entry.rank)")
+                .font(.caption.weight(.bold).monospacedDigit())
+                .foregroundStyle(rankColor(entry.rank))
+                .frame(width: 32, alignment: .trailing)
+
+            if entry.vipTier != .none {
+                Image(systemName: "crown.fill")
+                    .font(.system(size: 8))
+                    .foregroundStyle(vipColor(entry.vipTier))
+            }
+
+            Text(entry.playerName)
+                .font(.subheadline.weight(entry.isLocalPlayer ? .bold : .regular))
+                .foregroundStyle(entry.isLocalPlayer ? themeAccent(event.theme) : .white.opacity(0.8))
+                .lineLimit(1)
+
+            if entry.isLocalPlayer {
+                Text("YOU")
+                    .font(.system(size: 7, weight: .heavy))
+                    .foregroundStyle(themeAccent(event.theme))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(themeAccent(event.theme).opacity(0.15))
+                    .clipShape(Capsule())
+            }
+
+            Spacer()
+
+            Text(shortNumber(entry.score))
+                .font(.caption.weight(.semibold).monospacedDigit())
+                .foregroundStyle(.white.opacity(0.6))
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .background(entry.isLocalPlayer ? themeAccent(event.theme).opacity(0.06) : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
     // MARK: - Placement Rewards
 
     private func placementRewardsSection(_ event: LiveEventConfig) -> some View {
+        let scale = event.scaleFactor
+
+        return VStack(alignment: .leading, spacing: 14) {
+            // MARK: Daily Placement Rewards
+            dailyPlacementSection(event, scale: scale)
+
+            // MARK: Event Placement Rewards
+            eventPlacementSection(event, scale: scale)
+        }
+    }
+
+    private func dailyPlacementSection(_ event: LiveEventConfig, scale: Int) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: "sun.max.fill")
+                    .foregroundStyle(themeAccent(event.theme))
+                Text("Daily Ranking Rewards")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                Spacer()
+                Text("Day \(selectedDay + 1)")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.4))
+            }
+
+            // Claimable daily reward for completed days
+            let dayFinalized = state.dailyPercentiles[selectedDay] != nil
+            let dayClaimed = state.claimedDailyPlacementRewards.contains(selectedDay)
+
+            if dayFinalized, let tier = state.dailyPlacementTier(dayIndex: selectedDay) {
+                if !dayClaimed {
+                    claimBanner(
+                        title: "Day \(selectedDay + 1) Complete!",
+                        tier: tier,
+                        rank: state.dailyRanks[selectedDay],
+                        event: event
+                    ) {
+                        _ = eventManager.claimDailyPlacementReward(dayIndex: selectedDay, player: player)
+                    }
+                } else {
+                    HStack {
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundStyle(.green)
+                        Text("Day \(selectedDay + 1): \(tier.displayName) rewards claimed")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.green.opacity(0.8))
+                    }
+                    .padding(10)
+                }
+            }
+
+            // Daily tier breakdown
+            let dailyPct = eventManager.dailyPlayerPercentile
+            ForEach(EventPlacementTier.allCases, id: \.rawValue) { tier in
+                let isCurrentTier = dailyPct.map { EventPlacementTier.tier(forPercentile: $0) == tier } ?? false
+
+                placementTierRow(
+                    tier: tier,
+                    rewards: tier.dailyRewards(scaleFactor: scale),
+                    isCurrentTier: isCurrentTier,
+                    event: event
+                )
+            }
+        }
+        .padding(16)
+        .background(Color.white.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func eventPlacementSection(_ event: LiveEventConfig, scale: Int) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Image(systemName: "trophy.fill")
                     .foregroundStyle(.yellow)
-                Text("Placement Rewards")
+                Text("Event Ranking Rewards")
                     .font(.headline)
                     .foregroundStyle(.white)
                 Spacer()
             }
 
-            // If event ended and player has unclaimed reward
+            // Claimable event reward
             if let tier = state.placementTier, !state.claimedPlacementReward {
-                VStack(spacing: 8) {
-                    Text("Event Complete!")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.white)
-                    HStack {
-                        Image(systemName: tier.iconName)
-                            .font(.title)
-                            .foregroundStyle(tierColor(tier))
-                        VStack(alignment: .leading) {
-                            Text("Final Placement: \(tier.displayName)")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(tierColor(tier))
-                            if let rank = state.finalRank {
-                                Text("Rank #\(rank)")
-                                    .font(.caption)
-                                    .foregroundStyle(.white.opacity(0.5))
-                            }
-                        }
-                    }
-
-                    Button {
-                        _ = eventManager.claimPlacementReward(player: player)
-                    } label: {
-                        Text("Claim Rewards")
-                            .font(.subheadline.weight(.bold))
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 10)
-                            .background(tierColor(tier).opacity(0.2))
-                            .foregroundStyle(tierColor(tier))
-                            .clipShape(Capsule())
-                    }
+                claimBanner(
+                    title: "Event Complete!",
+                    tier: tier,
+                    rank: state.finalRank,
+                    event: event
+                ) {
+                    _ = eventManager.claimPlacementReward(player: player)
                 }
-                .padding(16)
-                .background(tierColor(tier).opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(tierColor(tier).opacity(0.3), lineWidth: 1)
-                )
             } else if state.claimedPlacementReward, let tier = state.placementTier {
                 HStack {
                     Image(systemName: "checkmark.seal.fill")
@@ -736,53 +811,100 @@ struct LiveEventView: View {
                 .padding(10)
             }
 
-            // Tier breakdown — always visible so players know what they're grinding for
-            let scale = event.scaleFactor
+            // Event tier breakdown — the big prizes
+            let eventPct = eventManager.localPlayerPercentile
             ForEach(EventPlacementTier.allCases, id: \.rawValue) { tier in
-                let isCurrentTier = eventManager.localPlayerPercentile.map {
-                    EventPlacementTier.tier(forPercentile: $0) == tier
-                } ?? false
+                let isCurrentTier = eventPct.map { EventPlacementTier.tier(forPercentile: $0) == tier } ?? false
 
-                HStack(spacing: 10) {
-                    Image(systemName: tier.iconName)
-                        .font(.caption)
-                        .foregroundStyle(tierColor(tier))
-                        .frame(width: 20)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 4) {
-                            Text(tier.displayName)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(isCurrentTier ? tierColor(tier) : .white.opacity(0.7))
-
-                            if isCurrentTier {
-                                Text("YOU")
-                                    .font(.system(size: 7, weight: .heavy))
-                                    .foregroundStyle(tierColor(tier))
-                                    .padding(.horizontal, 3)
-                                    .padding(.vertical, 1)
-                                    .background(tierColor(tier).opacity(0.15))
-                                    .clipShape(Capsule())
-                            }
-                        }
-
-                        Text(tier.rewards(scaleFactor: scale).map(\.displayText).joined(separator: ", "))
-                            .font(.system(size: 10))
-                            .foregroundStyle(.white.opacity(0.4))
-                            .lineLimit(2)
-                    }
-
-                    Spacer()
-                }
-                .padding(.vertical, 6)
-                .padding(.horizontal, 10)
-                .background(isCurrentTier ? tierColor(tier).opacity(0.06) : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                placementTierRow(
+                    tier: tier,
+                    rewards: tier.eventRewards(scaleFactor: scale),
+                    isCurrentTier: isCurrentTier,
+                    event: event
+                )
             }
         }
         .padding(16)
         .background(Color.white.opacity(0.05))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func claimBanner(title: String, tier: EventPlacementTier, rank: Int?, event: LiveEventConfig, action: @escaping () -> Void) -> some View {
+        VStack(spacing: 8) {
+            Text(title)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.white)
+            HStack {
+                Image(systemName: tier.iconName)
+                    .font(.title)
+                    .foregroundStyle(tierColor(tier))
+                VStack(alignment: .leading) {
+                    Text(tier.displayName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(tierColor(tier))
+                    if let rank {
+                        Text("Rank #\(rank)")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+                }
+            }
+            Button(action: action) {
+                Text("Claim Rewards")
+                    .font(.subheadline.weight(.bold))
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 10)
+                    .background(tierColor(tier).opacity(0.2))
+                    .foregroundStyle(tierColor(tier))
+                    .clipShape(Capsule())
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(16)
+        .background(tierColor(tier).opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(tierColor(tier).opacity(0.3), lineWidth: 1)
+        )
+    }
+
+    private func placementTierRow(tier: EventPlacementTier, rewards: [LiveEventReward], isCurrentTier: Bool, event: LiveEventConfig) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: tier.iconName)
+                .font(.caption)
+                .foregroundStyle(tierColor(tier))
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(tier.displayName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(isCurrentTier ? tierColor(tier) : .white.opacity(0.7))
+
+                    if isCurrentTier {
+                        Text("YOU")
+                            .font(.system(size: 7, weight: .heavy))
+                            .foregroundStyle(tierColor(tier))
+                            .padding(.horizontal, 3)
+                            .padding(.vertical, 1)
+                            .background(tierColor(tier).opacity(0.15))
+                            .clipShape(Capsule())
+                    }
+                }
+
+                Text(rewards.map(\.displayText).joined(separator: ", "))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.4))
+                    .lineLimit(2)
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .background(isCurrentTier ? tierColor(tier).opacity(0.06) : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     // MARK: - Upcoming Events
