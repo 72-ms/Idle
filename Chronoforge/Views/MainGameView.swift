@@ -11,6 +11,8 @@ struct MainGameView: View {
     @State private var showStats = false
     @State private var showSkillTree = false
     @State private var showDailyReward = false
+    @State private var showShop = false
+    @State private var showLeaderboard = false
 
     var body: some View {
         ZStack {
@@ -147,6 +149,12 @@ struct MainGameView: View {
                 ContractView()
             case .achievements:
                 AchievementView()
+            case .shop:
+                ShopView()
+            case .challenges:
+                ChallengeView()
+            case .leaderboard:
+                LeaderboardView()
             }
         }
         .frame(maxHeight: .infinity)
@@ -189,6 +197,20 @@ struct MainGameView: View {
                     selectedTab = .achievements
                 } label: {
                     Label("Achievements", systemImage: "trophy")
+                }
+
+                if player.totalEpochCount > 0 {
+                    Button {
+                        selectedTab = .challenges
+                    } label: {
+                        Label("Challenges", systemImage: "flame")
+                    }
+                }
+
+                Button {
+                    selectedTab = .shop
+                } label: {
+                    Label("Shop", systemImage: "cart")
                 }
 
                 Button {
@@ -314,4 +336,7 @@ enum GameTab: String {
     case epoch
     case contracts
     case achievements
+    case shop
+    case challenges
+    case leaderboard
 }

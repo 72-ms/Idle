@@ -8,6 +8,8 @@ class AppState {
     var showOfflineEarnings: Bool = false
     var offlineEarnings: Decimal = 0
     var offlineDuration: TimeInterval = 0
+    let storeManager: StoreManager
+    let leaderboardManager: LeaderboardManager
 
     init() {
         let saveManager = SaveManager()
@@ -21,7 +23,14 @@ class AppState {
         }
 
         self.engine = GameEngine(player: player, saveManager: saveManager)
+        self.storeManager = StoreManager()
+        self.leaderboardManager = LeaderboardManager()
         engine.start()
+        Task {
+            await storeManager.loadProducts()
+            leaderboardManager.authenticate()
+        }
+        AnalyticsManager.shared.track(.sessionStart)
     }
 
     func handleAppBecameActive() {
@@ -41,6 +50,8 @@ class AppState {
 
     func handleAppWillResignActive() {
         engine.stop()
+        AnalyticsManager.shared.track(.sessionEnd)
+        AnalyticsManager.shared.flush()
         NotificationManager.shared.rescheduleNotifications()
     }
 

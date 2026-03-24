@@ -382,4 +382,81 @@ final class GameEngineTests: XCTestCase {
         XCTAssertTrue(loaded.achievementState.isUnlocked(AchievementID(rawValue: "first_tap")))
         XCTAssertEqual(loaded.epochPerkState.level(for: EpochPerkID(rawValue: "head_start")), 1)
     }
+
+    // MARK: - Challenge Tests
+
+    func testChallengeSystemConfiguration() {
+        XCTAssertEqual(ChallengeSystem.allChallenges.count, 8)
+        for challenge in ChallengeSystem.allChallenges {
+            XCTAssertFalse(challenge.name.isEmpty)
+            XCTAssertFalse(challenge.description.isEmpty)
+            XCTAssertFalse(challenge.modifiers.isEmpty)
+            XCTAssertGreaterThan(challenge.rewardMultiplier, 1)
+        }
+    }
+
+    func testChallengeRequirements() {
+        let firstChallenge = ChallengeSystem.allChallenges.first!
+        XCTAssertTrue(ChallengeSystem.requirementsMet(for: firstChallenge, epochResets: 1))
+        XCTAssertFalse(ChallengeSystem.requirementsMet(for: firstChallenge, epochResets: 0))
+    }
+
+    func testChallengeStateInitial() {
+        let state = ChallengeState()
+        XCTAssertNil(state.activeChallenge)
+        XCTAssertTrue(state.completedChallenges.isEmpty)
+        XCTAssertEqual(state.totalChallengesCompleted, 0)
+    }
+
+    func testAvailableChallenges() {
+        let available = ChallengeSystem.availableChallenges(epochResets: 1, completed: [])
+        XCTAssertGreaterThan(available.count, 0)
+
+        let allAvailable = ChallengeSystem.availableChallenges(epochResets: 10, completed: [])
+        XCTAssertEqual(allAvailable.count, ChallengeSystem.allChallenges.count)
+    }
+
+    // MARK: - Seasonal Event Tests
+
+    func testSeasonalEventsExist() {
+        let events = SeasonalEventSystem.events(for: 2026)
+        XCTAssertEqual(events.count, 4)
+        for event in events {
+            XCTAssertFalse(event.name.isEmpty)
+            XCTAssertFalse(event.exclusiveCosmetics.isEmpty)
+            XCTAssertGreaterThan(event.bonusMultiplier, 1)
+        }
+    }
+
+    func testSeasonalEventStateInitial() {
+        let state = SeasonalEventState()
+        XCTAssertNil(state.currentEventId)
+        XCTAssertEqual(state.earnedCurrency, 0)
+        XCTAssertTrue(state.claimedRewards.isEmpty)
+    }
+
+    // MARK: - Analytics Tests
+
+    func testAnalyticsTracking() {
+        AnalyticsManager.shared.track(.tap)
+        AnalyticsManager.shared.track(.tap)
+        AnalyticsManager.shared.track(.tap)
+        XCTAssertGreaterThanOrEqual(AnalyticsManager.shared.eventCount(for: "tap"), 3)
+    }
+
+    // MARK: - Cosmetics Serialization
+
+    func testPlayerStateWithCosmeticsSerialization() throws {
+        let player = PlayerState()
+        player.ownedCosmetics = ["skin_ancient_gold", "theme_dark"]
+        player.equippedCosmetics = ["skin_ancient_gold"]
+        player.challengeState.totalChallengesCompleted = 5
+
+        let data = try JSONEncoder().encode(player)
+        let loaded = try JSONDecoder().decode(PlayerState.self, from: data)
+
+        XCTAssertEqual(loaded.ownedCosmetics, ["skin_ancient_gold", "theme_dark"])
+        XCTAssertEqual(loaded.equippedCosmetics, ["skin_ancient_gold"])
+        XCTAssertEqual(loaded.challengeState.totalChallengesCompleted, 5)
+    }
 }

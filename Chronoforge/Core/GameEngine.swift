@@ -74,6 +74,11 @@ class GameEngine {
     // MARK: - Game Actions
 
     func tap() {
+        // Challenge: no tapping modifier
+        if let config = activeChallengeConfig, config.modifiers.contains(.noTapping) {
+            return
+        }
+
         let tapValue = player.tapPower * tapSkillMultiplier() * tapRelicMultiplier()
         player.temporalEnergy += tapValue
         player.totalTEEarned += tapValue
@@ -84,9 +89,15 @@ class GameEngine {
     func buyGenerator(id: GeneratorID, count: Int = 1) -> Bool {
         var state = player.generatorState(for: id)
         let cost = state.costForBulk(count)
-        guard player.temporalEnergy >= cost else { return false }
+        let finalCost: Decimal
+        if let config = activeChallengeConfig, config.modifiers.contains(.doublePrice) {
+            finalCost = cost * 2
+        } else {
+            finalCost = cost
+        }
+        guard player.temporalEnergy >= finalCost else { return false }
 
-        player.temporalEnergy -= cost
+        player.temporalEnergy -= finalCost
         state.quantity += count
         player.generators[id.id] = state
         recalculateProduction()
@@ -152,6 +163,12 @@ class GameEngine {
 
         recalculateProduction()
         checkAchievements()
+
+        // Check if this completes an active challenge
+        if isChallengeActive {
+            completeChallengePrestige()
+        }
+
         save()
     }
 
@@ -182,6 +199,10 @@ class GameEngine {
     }
 
     func equipRelic(relicId: UUID) -> Bool {
+        if let config = activeChallengeConfig, config.modifiers.contains(.noRelics) {
+            return false
+        }
+
         guard let index = player.relics.firstIndex(where: { $0.id == relicId }) else { return false }
         guard !player.relics[index].isEquipped else { return false }
         guard player.equippedRelics.count < player.maxRelicSlots else { return false }
@@ -328,6 +349,81 @@ class GameEngine {
                 break // Other perks are passive multipliers applied during calculation
             }
         }
+    }
+
+    // MARK: - Challenges (Eternal Forge)
+
+    func canStartChallenge() -> Bool {
+        player.totalEpochCount >= 1 && player.challengeState.activeChallenge == nil
+    }
+
+    func startChallenge(id: ChallengeID) -> Bool {
+        guard canStartChallenge() else { return false }
+        guard let config = ChallengeSystem.allChallenges.first(where: { $0.id == id }) else { return false }
+        guard ChallengeSystem.requirementsMet(for: config, epochResets: player.totalEpochCount) else { return false }
+        guard !player.challengeState.completedChallenges.contains(id.rawValue) else { return false }
+
+        var challenge = ActiveChallenge(configId: id, startTime: Date())
+        if config.modifiers.contains(.speedRun) {
+            challenge.timeLimit = 1800 // 30 minutes
+        }
+
+        player.challengeState.activeChallenge = challenge
+
+        // Apply challenge modifiers by performing a soft reset
+        player.temporalEnergy = 0
+        player.totalTEEarned = 0
+        player.generators = [:]
+        player.purchasedUpgrades = []
+        player.unlockedEras = ["ancient"]
+        player.currentEra = .ancient
+        player.tapPower = 1
+
+        applyEpochPerksOnPrestige()
+        recalculateProduction()
+        save()
+        return true
+    }
+
+    func forfeitChallenge() {
+        player.challengeState.activeChallenge = nil
+        save()
+    }
+
+    func completeChallengePrestige() {
+        guard let active = player.challengeState.activeChallenge else { return }
+        guard let config = ChallengeSystem.allChallenges.first(where: { $0.id == active.configId }) else { return }
+
+        // Check speed run time limit
+        if let timeLimit = active.timeLimit {
+            guard Date().timeIntervalSince(active.startTime) <= timeLimit else {
+                forfeitChallenge()
+                return
+            }
+        }
+
+        // Award bonus prestige reward with challenge multiplier
+        let baseShards = prestigeReward()
+        let bonusShards = Int(Decimal(baseShards) * (config.rewardMultiplier - 1))
+        player.chronoShards += bonusShards
+        player.totalChronoShardsEarned += bonusShards
+        player.skillTree.availablePoints += bonusShards
+
+        // Mark challenge complete
+        player.challengeState.completedChallenges.insert(active.configId.rawValue)
+        player.challengeState.totalChallengesCompleted += 1
+        player.challengeState.activeChallenge = nil
+
+        save()
+    }
+
+    var activeChallengeConfig: ChallengeConfig? {
+        guard let active = player.challengeState.activeChallenge else { return nil }
+        return ChallengeSystem.allChallenges.first { $0.id == active.configId }
+    }
+
+    var isChallengeActive: Bool {
+        player.challengeState.activeChallenge != nil
     }
 
     // MARK: - Contracts
@@ -504,6 +600,13 @@ class GameEngine {
         let epochLevel = player.epochPerkState.level(for: EpochPerkID(rawValue: "eternal_forge"))
         if epochLevel > 0 {
             total *= (1 + Decimal(string: "0.25")! * Decimal(epochLevel))
+        }
+
+        // Apply challenge modifiers
+        if let config = activeChallengeConfig {
+            if config.modifiers.contains(.halfProduction) {
+                total /= 2
+            }
         }
 
         // Apply epoch prestige multiplier to production too

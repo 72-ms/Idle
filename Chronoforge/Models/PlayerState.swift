@@ -51,6 +51,16 @@ class PlayerState: Codable {
     // Achievements
     var achievementState: AchievementState = AchievementState()
 
+    // Challenges (Eternal Forge)
+    var challengeState: ChallengeState = ChallengeState()
+
+    // Seasonal Events
+    var seasonalEventState: SeasonalEventState = SeasonalEventState()
+
+    // Cosmetics
+    var ownedCosmetics: Set<String> = []
+    var equippedCosmetics: Set<String> = []
+
     // MARK: - Codable
 
     enum CodingKeys: String, CodingKey {
@@ -68,6 +78,9 @@ class PlayerState: Codable {
         case epochPerkState
         case activeContracts, completedContractCount
         case achievementState
+        case challengeState
+        case seasonalEventState
+        case ownedCosmetics, equippedCosmetics
     }
 
     init() {}
@@ -103,6 +116,10 @@ class PlayerState: Codable {
         activeContracts = try container.decodeIfPresent([ActiveContract].self, forKey: .activeContracts) ?? []
         completedContractCount = try container.decodeIfPresent(Int.self, forKey: .completedContractCount) ?? 0
         achievementState = try container.decodeIfPresent(AchievementState.self, forKey: .achievementState) ?? AchievementState()
+        challengeState = try container.decodeIfPresent(ChallengeState.self, forKey: .challengeState) ?? ChallengeState()
+        seasonalEventState = try container.decodeIfPresent(SeasonalEventState.self, forKey: .seasonalEventState) ?? SeasonalEventState()
+        ownedCosmetics = try container.decodeIfPresent(Set<String>.self, forKey: .ownedCosmetics) ?? []
+        equippedCosmetics = try container.decodeIfPresent(Set<String>.self, forKey: .equippedCosmetics) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -136,6 +153,10 @@ class PlayerState: Codable {
         try container.encode(activeContracts, forKey: .activeContracts)
         try container.encode(completedContractCount, forKey: .completedContractCount)
         try container.encode(achievementState, forKey: .achievementState)
+        try container.encode(challengeState, forKey: .challengeState)
+        try container.encode(seasonalEventState, forKey: .seasonalEventState)
+        try container.encode(ownedCosmetics, forKey: .ownedCosmetics)
+        try container.encode(equippedCosmetics, forKey: .equippedCosmetics)
     }
 
     // MARK: - Helpers
