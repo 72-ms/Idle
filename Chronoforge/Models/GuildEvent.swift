@@ -180,7 +180,7 @@ struct GuildEventPlayerState: Codable {
 
     // Daily contribution
     var claimedDailyContributionRewards: Set<Int> = []
-    var dailyContributionRanks: [Int: Int] = []
+    var dailyContributionRanks: [Int: Int] = [:]
 
     var guildPlacementTier: EventPlacementTier? {
         guard let pct = finalGuildPercentile else { return nil }
